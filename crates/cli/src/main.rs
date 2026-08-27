@@ -4,7 +4,10 @@ use std::env;
 use std::fs;
 use std::process::ExitCode;
 
+use switchback_ingest::CnigFedmeSource;
 use switchback_matcher::{GraphEdge, Point, match_polyline};
+use switchback_osm::read_walkable_ways;
+use switchback_trailpack::OfficialTrailSource;
 
 fn main() -> ExitCode {
     let arguments: Vec<_> = env::args().skip(1).collect();
@@ -15,7 +18,7 @@ fn main() -> ExitCode {
         }
         Err(error) => {
             eprintln!(
-                "error: {error}\nusage: switchback-cli <coverage|density|match-metrics> <fixture.txt>"
+                "error: {error}\nusage: switchback-cli <coverage|density|match-metrics|inspect-cnig|inspect-osm> <local-file>"
             );
             ExitCode::from(2)
         }
@@ -24,8 +27,13 @@ fn main() -> ExitCode {
 
 fn run(args: &[String]) -> Result<String, String> {
     let [command, path] = args else {
-        return Err("expected a command and fixture path".into());
+        return Err("expected a command and local file path".into());
     };
+    match command.as_str() {
+        "inspect-cnig" => return inspect_cnig(path),
+        "inspect-osm" => return inspect_osm(path),
+        _ => {}
+    }
     let input =
         fs::read_to_string(path).map_err(|error| format!("could not read `{path}`: {error}"))?;
     let fixture = Fixture::parse(&input)?;
@@ -72,6 +80,38 @@ fn run(args: &[String]) -> Result<String, String> {
         }
         _ => Err(format!("unknown command `{command}`")),
     }
+}
+
+fn inspect_cnig(path: &str) -> Result<String, String> {
+    let source = CnigFedmeSource::from_path(path);
+    let traces = source
+        .load([-180.0, -90.0, 180.0, 90.0])
+        .map_err(|error| error.to_string())?;
+    let points = traces
+        .iter()
+        .map(|trace| trace.geometry.len())
+        .sum::<usize>();
+    Ok(format!(
+        "cnig-inspect source={} licence={} traces={} points={}",
+        source.id(),
+        source.licence(),
+        traces.len(),
+        points
+    ))
+}
+
+fn inspect_osm(path: &str) -> Result<String, String> {
+    let input =
+        fs::File::open(path).map_err(|error| format!("could not read `{path}`: {error}"))?;
+    let extract = read_walkable_ways(input).map_err(|error| error.to_string())?;
+    Ok(format!(
+        "osm-inspect scanned_ways={} walkable_ways={} paths={} footways={} tracks={}",
+        extract.stats.scanned_ways,
+        extract.stats.emitted_ways,
+        extract.stats.paths,
+        extract.stats.footways,
+        extract.stats.tracks
+    ))
 }
 
 #[derive(Debug)]
@@ -185,6 +225,19 @@ mod tests {
                 .starts_with("density edges_per_km=")
         );
     }
+
+    #[test]
+    fn inspects_a_local_cnig_kml_without_exposing_its_text() {
+        let fixture = format!(
+            "{}/../ingest/tests/fixtures/cnig-fedme.kml",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        assert_eq!(
+            inspect_cnig(&fixture).unwrap(),
+            "cnig-inspect source=cnig-fedme licence=CC-BY-4.0 traces=1 points=3"
+        );
+    }
+
     fn run_fixture(command: &str, fixture: &str) -> Result<String, String> {
         let fixture = Fixture::parse(fixture)?;
         match command {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+  <Placemark>
+    <name>Display name</name>
+    <ExtendedData><SchemaData>
+      <SimpleData name="id">GRXX0065_05E003_0</SimpleData>
+      <SimpleData name="nombre">GR-65.5. Etapa 03. L'Albiol-Ulldemolins</SimpleData>
+    </SchemaData></ExtendedData>
+    <LineString><coordinates>
+      1.0887058,41.2513323,812.36 1.0895697,41.2520271,822.70 1.0900000,41.2530000
+    </coordinates></LineString>
+  </Placemark>
+</Document></kml>

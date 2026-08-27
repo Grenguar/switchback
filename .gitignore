@@ -18,6 +18,7 @@ target/
 *.trailpack/
 trailpacks/
 data/derived/
+data/raw/
 
 # Environment, credentials, and local deployment state
 .env

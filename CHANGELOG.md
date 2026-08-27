@@ -2,6 +2,19 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.2] - 2026-08-27
+
+### Added
+
+- A bounded offline CNIG/FEDME KML adapter that preserves official identifiers and WGS84 geometry, records CC-BY-4.0 provenance, and retains legacy GPX support.
+- A strict OSM PBF extractor for `path`, `footway`, and `track` ways. It retains only typed routing tags and deliberately excludes untrusted names, descriptions, notes, URLs, and user identifiers.
+- CLI inspection commands for local CNIG KML and OSM PBF inputs, plus reproducible Tarragona source records and independently-qualified Q7 starts for Ulldemolins, Prades, and Albarca.
+
+### Changed
+
+- Configured Netlify’s build to use pnpm on Node 24, matching the pinned local Node package manager.
+- Bumped the Rust workspace and web application versions from `0.1.1` to `0.1.2`.
+
 ## [0.1.1] - 2026-08-27
 
 ### Added

@@ -2,7 +2,7 @@ import { TrailPlanner, documentedStarts, type PlannedRoute, type StartId, type W
 import { RouteSession, type WaypointEdit } from "./route-session";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
-export interface ToolContract { name: "plan_route" | "get_route_summary" | "explain_segment" | "avoid_segment" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
+export interface ToolContract { name: "plan_route" | "get_route_summary" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
 export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined) => void;
 
 const OUTPUT_LIMIT = 1_500;
@@ -47,6 +47,17 @@ const abortable = async <T>(signal: AbortSignal | undefined, result: T): Promise
 const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Call plan_route with the available GR-65.5 trail access first."); return activeRoute; };
 const routeOutput = (route: PlannedRoute) => ({ route: route.name, start: route.start.name, distance_km: route.distanceKm, ascent_m: null, duration_hours: route.durationHours, official_match_percent: route.waymarkedPercent, source: route.source, attribution: provenance });
 const segmentOutput = (segment: PlannedRoute["segments"][number]) => ({ name: segment.name, surface: segment.surface, sac_scale: segment.sac_scale, official_match: segment.waymarked, official_match_ref: segment.official_ref });
+const xml = (value: string): string => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
+const boundedCoordinates = (coordinates: PlannedRoute["coordinates"], maximum = 12): PlannedRoute["coordinates"] => {
+  if (coordinates.length <= maximum) return coordinates;
+  return Array.from({ length: maximum }, (_, index) => coordinates[Math.round(index * (coordinates.length - 1) / (maximum - 1))]!);
+};
+const gpxFor = (route: PlannedRoute): { filename: string; content: string; exportedPoints: number } => {
+  const points = boundedCoordinates(route.coordinates);
+  const attribution = provenance.sources.join("; ");
+  const content = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Switchback TrailPack" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${xml(route.name)}</name><desc>${xml(`Simplified TrailPack route. ${route.source}. ${attribution}`)}</desc></metadata><trk><name>${xml(route.name)}</name><trkseg>${points.map(([latitude, longitude]) => `<trkpt lat="${latitude.toFixed(6)}" lon="${longitude.toFixed(6)}"/>`).join("")}</trkseg></trk></gpx>`;
+  return { filename: "switchback-trailpack-route.gpx", content, exportedPoints: points.length };
+};
 
 const rawToolContracts: ToolContract[] = [
   {
@@ -76,8 +87,43 @@ const rawToolContracts: ToolContract[] = [
     execute: async (input, signal) => { const data = object(input); only(data, ["segment_name"]); const segmentName = text(data.segment_name, "segment_name"); const segment = current().segments.find((candidate) => candidate.name === segmentName); if (!segment) throw new Error("segment_name must name a segment from get_route_summary."); return abortable(signal, { segment: segmentOutput(segment), source: "OSM-derived TrailPack v1 edge tags", caution: "OSM tags are untrusted field information; verify current local conditions.", attribution: provenance }); },
   },
   {
-    name: "avoid_segment", description: "Explain whether the current TrailPack planner can safely avoid an active segment.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, required: ["segment_name"], properties: { segment_name: { type: "string", maxLength: 120, description: "physical_id from get_route_summary.notable_segments." } } },
-    execute: async (input, signal) => { const data = object(input); only(data, ["segment_name"]); const segmentName = text(data.segment_name, "segment_name"); if (!current().segments.some((segment) => segment.name === segmentName)) throw new Error("segment_name must name a segment from get_route_summary."); return abortable(signal, { route: current().name, avoided: false, segment_name: segmentName, reason: "This T2 planner does not yet support a blocked-edge replan. It intentionally leaves the rendered route unchanged rather than claiming avoidance.", attribution: provenance }); },
+    name: "avoid_segment", description: "Replan the active directed TrailPack loop while blocking one active physical segment. The route changes only after a verified replacement loop is found and rendered; otherwise it fails closed.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, required: ["segment_name"], properties: { segment_name: { type: "string", maxLength: 120, description: "physical_id from get_route_summary.notable_segments." } } },
+    execute: async (input, signal) => {
+      const data = object(input); only(data, ["segment_name"]); const segmentName = text(data.segment_name, "segment_name");
+      const before = current();
+      if (!before.segments.some((segment) => segment.name === segmentName)) throw new Error("segment_name must name a segment from get_route_summary.");
+      if (!planner) throw new Error("TrailPack graph is not ready; wait for its data status before replanning.");
+      const next = planner.replanAvoidingSegment(before, segmentName, true);
+      // Do not change activeRoute or its session until both graph verification
+      // and rendering succeed. A throw above leaves the route/session intact.
+      await renderRoute?.(next);
+      activeRoute = next;
+      routeSession = new RouteSession(next, routeSession?.targetKm ?? before.distanceKm);
+      return abortable(signal, {
+        ...routeOutput(next), avoided: true, segment_name: segmentName,
+        before: { distance_km: before.distanceKm, official_match_percent: before.waymarkedPercent },
+        delta_distance_km: Math.round((next.distanceKm - before.distanceKm) * 10) / 10,
+        delta_official_match_percent: next.waymarkedPercent - before.waymarkedPercent,
+        caution: "Official-match coverage is TrailPack evidence, not a claim that every segment is currently waymarked. Verify local conditions.",
+      });
+    },
+  },
+  {
+    name: "prepare_gpx", description: "Prepare a bounded GPX 1.1 representation of the active route with TrailPack provenance. It does not download or share a file; ask the user to save the returned content through a normal browser gesture.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    execute: async (input, signal) => {
+      only(object(input), []);
+      const route = current();
+      const gpx = gpxFor(route);
+      return abortable(signal, {
+        filename: gpx.filename,
+        mime_type: "application/gpx+xml",
+        gpx_1_1: gpx.content,
+        original_route_points: route.coordinates.length,
+        exported_points: gpx.exportedPoints,
+        simplification: "Bounded 12-point GPX representation; inspect it before using it for navigation.",
+        next_step: "Show this GPX to the user and let them save or import it using their own browser or device gesture; no download was started.",
+      });
+    },
   },
   {
     name: "describe_last_edit", description: "Read the most recent manual map edit and its measured route effect.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },

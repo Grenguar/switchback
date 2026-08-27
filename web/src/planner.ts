@@ -187,6 +187,25 @@ export class TrailPlanner {
   }
 
   /**
+   * Rebuilds the current loop while excluding one physical TrailPack segment.
+   * All candidate calculations happen before a route is returned, which lets
+   * callers keep their rendered route and session intact when there is no
+   * legal replacement. A physical id is blocked in both directions.
+   */
+  replanAvoidingSegment(route: PlannedRoute, physicalId: string, preferWaymarked = true): PlannedRoute {
+    if (!physicalId) throw new Error("A TrailPack physical segment id is required.");
+    const edgeById = new Map(this.edges.map((edge) => [edge.id, edge]));
+    const activeEdges = route.edgeIds.map((id) => edgeById.get(id));
+    if (activeEdges.some((edge) => edge === undefined)) throw new Error("The active route does not belong to this TrailPack graph.");
+    if (!activeEdges.some((edge) => edge!.physical_id === physicalId)) throw new Error("The requested segment is not part of the active TrailPack route.");
+    const startNode = activeEdges[0]!.from;
+    const loopEdges = this.findLoop(startNode, route.distanceKm * 1_000, preferWaymarked, new Set([physicalId]));
+    if (!loopEdges) throw new Error("No bounded directed non-retracing loop can avoid that segment; the current route is unchanged.");
+    if (loopEdges.some((edge) => edge.physical_id === physicalId)) throw new Error("TrailPack avoidance verification failed; the current route is unchanged.");
+    return this.toPlannedRoute(route.start, loopEdges, "avoiding segment");
+  }
+
+  /**
    * Evaluates a prospective trailhead without returning a route. This is used
    * by tests and by planning failures so rejected inputs have inspectable,
    * countable evidence rather than a generic \"no route\" message.
@@ -289,7 +308,37 @@ export class TrailPlanner {
     };
   }
 
-  private dijkstra(start: number, reverse: boolean, preferWaymarked: boolean): { distance: number[]; previous: Array<number | undefined> } {
+  private findLoop(startNode: number, targetMetres: number, preferWaymarked: boolean, permanentlyBlocked: Set<string> = new Set()): IndexedEdge[] | undefined {
+    const outward = this.dijkstra(startNode, false, preferWaymarked, permanentlyBlocked);
+    const homeward = this.dijkstra(startNode, true, preferWaymarked, permanentlyBlocked);
+    const candidates: Array<{ node: number; score: number }> = [];
+    for (let node = 0; node < this.nodes.length; node += 1) {
+      const total = outward.distance[node]! + homeward.distance[node]!;
+      if (!Number.isFinite(total) || node === startNode || total < MIN_LOOP_METRES || total > MAX_LOOP_METRES) continue;
+      candidates.push({ node, score: Math.abs(total - targetMetres) });
+    }
+    let winner: { score: number; edges: IndexedEdge[] } | undefined;
+    for (const { node } of candidates.sort((a, b) => a.score - b.score).slice(0, 160)) {
+      const outEdges = this.forwardEdges(node, outward.previous);
+      if (outEdges.length === 0) continue;
+      const blocked = new Set(permanentlyBlocked);
+      blocked.add(outEdges[Math.floor(outEdges.length / 2)]!.physical_id);
+      const returnEdges = this.findPath(node, startNode, blocked, preferWaymarked);
+      if (!returnEdges || returnEdges.length === 0) continue;
+      const outwardPhysical = new Set(outEdges.map((edge) => edge.physical_id));
+      const shared = returnEdges.filter((edge) => outwardPhysical.has(edge.physical_id)).length / Math.max(outEdges.length, returnEdges.length);
+      if (shared > 0.75) continue;
+      const allEdges = outEdges.concat(returnEdges);
+      const total = allEdges.reduce((sum, edge) => sum + edge.length_m, 0);
+      if (total < MIN_LOOP_METRES || total > MAX_LOOP_METRES || allEdges.some((edge) => permanentlyBlocked.has(edge.physical_id))) continue;
+      const officialPenalty = preferWaymarked ? (allEdges.filter((edge) => edge.official === null).length / allEdges.length) * 500 : 0;
+      const score = Math.abs(total - targetMetres) + officialPenalty;
+      if (!winner || score < winner.score) winner = { score, edges: allEdges };
+    }
+    return winner?.edges;
+  }
+
+  private dijkstra(start: number, reverse: boolean, preferWaymarked: boolean, blockedPhysicalIds: Set<string> = new Set()): { distance: number[]; previous: Array<number | undefined> } {
     const distance = Array<number>(this.nodes.length).fill(Number.POSITIVE_INFINITY);
     const previous: Array<number | undefined> = Array(this.nodes.length).fill(undefined);
     distance[start] = 0; const queue = new MinHeap(); queue.push({ node: start, distance: 0 });
@@ -298,6 +347,7 @@ export class TrailPlanner {
       const candidates = reverse ? this.incoming[item.node]! : this.outgoing[item.node]!;
       for (const edgeIndex of candidates) {
         const edge = this.edges[edgeIndex]!;
+        if (blockedPhysicalIds.has(edge.physical_id)) continue;
         const next = reverse ? edge.from : edge.to;
         const cost = edge.length_m + (preferWaymarked && edge.official === null ? 15 : 0);
         const candidate = item.distance + cost;

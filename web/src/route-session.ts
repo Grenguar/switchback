@@ -42,6 +42,7 @@ export class RouteSession {
   get route(): PlannedRoute { return this.activeRoute; }
   get lastEdit(): WaypointEdit | undefined { return this.latestEdit; }
   get revision(): number { return this.routeRevision; }
+  get targetKm(): number { return this.requestedTargetKm; }
 
   commitWaypoint(planner: TrailPlanner, waypoint: Waypoint, preferWaymarked = true): WaypointEdit {
     const before = metricsFor(this.activeRoute);

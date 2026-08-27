@@ -2,6 +2,21 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.7] - 2026-08-27
+
+### Added
+
+- A real static Canvas map that draws the offline TrailPack network, distinguishes official-match evidence, and overlays the selected route without any runtime map or routing service.
+- A sixth WebMCP tool, `prepare_gpx`, which returns a bounded, attributed GPX 1.1 representation for the user to save through a normal browser gesture.
+- Graph-backed `avoid_segment` re-planning: the selected physical segment is blocked, and the route changes only after a legal replacement loop renders.
+- Reproducible offline Q3 terrain-coverage and Q6 static-output evidence scripts, plus a six-tool WebMCP contract fixture.
+
+### Changed
+
+- The project README now documents pnpm/Node 24 and the offline map/evidence workflow.
+- Q3 is explicitly evidence-only: sparse terrain tags do not power a difficulty claim; Q8 remains confidence-gated below its pass threshold.
+- Bumped the Rust workspace and web application versions from `0.1.6` to `0.1.7`.
+
 ## [0.1.6] - 2026-08-27
 
 ### Added

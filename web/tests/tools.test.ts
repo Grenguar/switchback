@@ -15,12 +15,35 @@ const artifact: TrailPackArtifact = {
     { id: "a+", physical_id: "a", from: 0, to: 1, length_m: 1000, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: { source_id: "osm", ref_code: "GR", name: "GR test", confidence: 1 } },
     { id: "b+", physical_id: "b", from: 1, to: 2, length_m: 900, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: null },
     { id: "c+", physical_id: "c", from: 2, to: 0, length_m: 900, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: null },
+    { id: "x+", physical_id: "x", from: 0, to: 1, length_m: 1000, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: null },
   ] } },
 };
 
-test("all five tool contracts are present and have strict object schemas", () => {
-  assert.deepEqual(toolContracts.map((tool) => tool.name), ["plan_route", "get_route_summary", "explain_segment", "avoid_segment", "describe_last_edit"]);
+test("all six tool contracts are present and have strict object schemas", () => {
+  assert.deepEqual(toolContracts.map((tool) => tool.name), ["plan_route", "get_route_summary", "explain_segment", "avoid_segment", "prepare_gpx", "describe_last_edit"]);
   for (const tool of toolContracts) { assert.equal(tool.inputSchema.type, "object"); assert.equal(tool.inputSchema.additionalProperties, false); assert.equal(tool.annotations.untrustedContentHint, true); }
+});
+
+test("avoid_segment replans without the physical segment and GPX remains bounded", async () => {
+  setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
+  const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
+  await plan.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true });
+  const avoid = toolContracts.find((candidate) => candidate.name === "avoid_segment"); assert.ok(avoid);
+  const result = await avoid.execute({ segment_name: "a" }) as { avoided: boolean; segment_name: string; delta_distance_km: number };
+  assert.equal(result.avoided, true); assert.equal(result.segment_name, "a"); assert.equal(result.delta_distance_km, 0);
+  const summary = toolContracts.find((candidate) => candidate.name === "get_route_summary"); assert.ok(summary);
+  const after = await summary.execute({}) as { notable_segments: Array<{ name: string }> };
+  assert.ok(!after.notable_segments.some((segment) => segment.name === "a"));
+
+  await assert.rejects(() => avoid.execute({ segment_name: "b" }), /current route is unchanged/);
+  const afterFailedAvoid = await summary.execute({}) as { notable_segments: Array<{ name: string }> };
+  assert.deepEqual(afterFailedAvoid.notable_segments, after.notable_segments);
+
+  const gpx = toolContracts.find((candidate) => candidate.name === "prepare_gpx"); assert.ok(gpx);
+  const prepared = await gpx.execute({}) as { gpx_1_1: string; exported_points: number; original_route_points: number };
+  assert.match(prepared.gpx_1_1, /<gpx version="1.1"/); assert.match(prepared.gpx_1_1, /Simplified TrailPack route/);
+  assert.ok(prepared.exported_points <= 12); assert.ok(prepared.original_route_points >= prepared.exported_points);
+  assert.ok(JSON.stringify(prepared).length <= 1_500);
 });
 
 test("plan_route renders a directed TrailPack loop before returning", async () => {

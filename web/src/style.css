@@ -28,4 +28,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .planner select { width: 100%; min-height: 44px; margin-top: 10px; padding: 10px 30px 10px 0; color: #edf0e5; background: #19352d; border: 0; border-bottom: 1px solid #607a6d; border-radius: 0; font: 500 .92rem Manrope, sans-serif; }
 .field-hint { margin: -13px 0 0; color: #b4c5ba; font-size: .72rem; line-height: 1.5; }
 .tool { min-height: 76px; }
+.trail-map { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.map-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.map-grain { z-index: 2; pointer-events: none; opacity: .12; }
+.contours { position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .38; }
+.map-key { gap: 10px; }
+.network-swatch { display: inline-block; width: 19px; vertical-align: middle; margin-right: 5px; border-top: 1px solid #1b4330; }
 @media (max-width: 760px) { .masthead { height: auto; min-height: 70px; gap: 12px; } }

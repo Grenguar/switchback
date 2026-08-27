@@ -1,0 +1,22 @@
+{
+  "fixture_version": 1,
+  "purpose": "Offline acceptance fixture for Switchback's browser-native tool surface.",
+  "required_core_tools": [
+    "plan_route",
+    "get_route_summary",
+    "explain_segment",
+    "avoid_segment",
+    "prepare_gpx",
+    "describe_last_edit"
+  ],
+  "required_contract_properties": {
+    "input_schema_type": "object",
+    "additional_properties": false,
+    "untrusted_content_hint": true
+  },
+  "acceptance": {
+    "registration": "Every active tool is offered to the browser model context.",
+    "routing": "plan_route renders a directed TrailPack loop before returning.",
+    "limitations": "Unsupported elevation and grade constraints must be rejected rather than estimated."
+  }
+}

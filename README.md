@@ -1,7 +1,7 @@
 # Switchback
 
-Official waymarked trails, made loopable at the length you have time for —
-planned with an agent on a live map.
+Source-backed trails, made loopable at the length you have time for — planned
+with an agent on a live offline map.
 
 Switchback is an entry for the OpenAI WebMCP Challenge. Its first region is
 Tarragona, Catalunya: the offline pipeline produces a portable **TrailPack**
@@ -15,7 +15,7 @@ small, honest end-to-end loop before expanding the product:
 
 1. Build and load a TrailPack containing walking graph tiles and provenance.
 2. Generate plausible loops on the browser map.
-3. Expose the planning actions as browser-native WebMCP tools.
+3. Expose six planning actions as browser-native WebMCP tools.
 4. Keep the static app publicly deployable and independently testable.
 
 The app is intentionally static: no user account, private trail history, or
@@ -26,13 +26,22 @@ server-side itinerary store is required for the MVP.
 The frontend lives in [`web/`](web/). Once its dependencies are installed:
 
 ```sh
-cd web
-npm install
-npm run dev
+pnpm --dir web install
+pnpm --dir web dev
 ```
 
-Netlify is configured to build from that directory with `npm run build` and
-publish `web/dist`.
+Netlify is configured to build from `web/` with `pnpm run build` and publish
+`dist`. The shipped map draws the local TrailPack graph directly on Canvas; it
+does not depend on a runtime routing or map-tile service.
+
+Run the complete offline validation and evidence bundle from a Node 24 shell:
+
+```sh
+bash scripts/evaluate-mvp-offline.sh
+```
+
+See [`docs/MVP-EVALUATION.md`](docs/MVP-EVALUATION.md) for measured Q3/Q6
+evidence and the remaining manual browser-host checks.
 
 ## Data, attribution, and scope
 

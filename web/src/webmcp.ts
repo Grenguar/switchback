@@ -1,6 +1,6 @@
 import { activeRouteToolContracts, baseToolContracts, type ToolContract } from "./tools";
 
-type ToolDefinition = { name: string; description: string; inputSchema: Record<string, unknown>; annotations: ToolContract["annotations"]; execute: (input: unknown, context: { signal: AbortSignal }) => Promise<unknown> };
+type ToolDefinition = { name: string; description: string; inputSchema: Record<string, unknown>; annotations: ToolContract["annotations"]; execute: (input: unknown, context?: { signal?: AbortSignal }) => Promise<unknown> };
 type ModelContext = { registerTool?: (tool: ToolDefinition, options?: { signal?: AbortSignal }) => Promise<unknown> | unknown };
 declare global { interface Document { modelContext?: ModelContext } interface Navigator { modelContext?: ModelContext } }
 export type BridgeStatus = "unavailable" | "registered" | "failed";
@@ -21,7 +21,9 @@ export async function registerWebMcpTools(routeReady = false): Promise<{ status:
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
-        execute: (args, { signal }) => tool.execute(args, signal),
+        // Chrome's manual executeTool test hook omits the context argument;
+        // agent-initiated calls may supply its AbortSignal.
+        execute: (args, context) => tool.execute(args, context?.signal),
       };
       if (document.modelContext?.registerTool) {
         await document.modelContext.registerTool(definition, { signal: registrationController.signal });

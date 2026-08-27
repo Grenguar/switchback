@@ -9,3 +9,22 @@
 .tooling, .log-section { display: grid; grid-template-columns: minmax(260px, 32%) 1fr; gap: 52px; padding: 82px 0; border-bottom: 1px solid #49655a; }.tooling h2, .log-section h2 { margin: 0; font: 500 clamp(2rem, 3.5vw, 3.2rem)/.98 'Playfair Display', serif; letter-spacing: -.045em; }.tool-list { border-top: 1px solid #49655a; }.tool { width: 100%; display: grid; grid-template-columns: 34px 1fr auto; gap: 0 16px; padding: 17px 0; color: inherit; text-align: left; background: transparent; border: 0; border-bottom: 1px solid #49655a; }.tool span, .tool b { color: #b7cf5c; font: .66rem 'DM Mono', monospace; }.tool strong { text-transform: capitalize; font-size: .88rem; }.tool small { grid-column: 2 / 4; color: #a6b7ad; padding-top: 6px; font-size: .72rem; line-height: 1.45; }.tool:hover strong { color: #b7cf5c; }.log { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }.log li { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 14px; background: #19352d; border-left: 2px solid #b7cf5c; }.log li > span { color: #b7cf5c; font: .64rem 'DM Mono', monospace; }.log strong { display: block; margin-bottom: 7px; font: .7rem 'DM Mono', monospace; }.log code { display: block; overflow-wrap: anywhere; color: #b4c5ba; font: .65rem/1.5 'DM Mono', monospace; }.log .empty { display: block; color: #a6b7ad; border-left-color: #49655a; font-size: .82rem; }
 @media (max-width: 760px) { .shell { padding-inline: 20px; }.masthead { height: 70px; }.status { display: none; }.intro { padding: 50px 0 36px; }.workspace, .tooling, .log-section { grid-template-columns: 1fr; gap: 28px; }.workspace { display: flex; flex-direction: column; }.planner { border-right: 0; border-bottom: 1px solid #49655a; }.map-panel { min-height: 460px; }.tooling, .log-section { padding: 55px 0; }.route-card { top: 15px; right: 15px; }.map-key { bottom: 14px; left: 14px; right: 14px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+/* Interactive and responsive refinements for the TrailPack loading surface. */
+button { touch-action: manipulation; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid #f4f1db; outline-offset: 3px; }
+.plain-button { min-height: 44px; }
+.plain-button:hover { border-color: #b7cf5c; color: #b7cf5c; }
+.plan-button { min-height: 48px; }
+.plan-button:hover { background: #d2e27d; }
+.plan-button:active, .tool:active, .plain-button:active { transform: translateY(1px); }
+.data-status { min-height: 2.8em; margin: 0 0 8px; color: #c4d1c8; font-size: .73rem; line-height: 1.5; }
+.data-status::before { display: inline-block; width: .8em; margin-right: .45em; font-weight: 700; }
+.data-status.loading::before { content: "…"; color: #efb464; }
+.data-status.ready::before { content: "✓"; color: #b7cf5c; }
+.data-status.unavailable::before { content: "!"; color: #efb464; }
+.source-list { display: grid; gap: 6px; padding: 9px 0 0; margin: 0; list-style: none; color: #b4c5ba; font-size: .7rem; line-height: 1.5; overflow-wrap: anywhere; }
+.planner select { width: 100%; min-height: 44px; margin-top: 10px; padding: 10px 30px 10px 0; color: #edf0e5; background: #19352d; border: 0; border-bottom: 1px solid #607a6d; border-radius: 0; font: 500 .92rem Manrope, sans-serif; }
+.field-hint { margin: -13px 0 0; color: #b4c5ba; font-size: .72rem; line-height: 1.5; }
+.tool { min-height: 76px; }
+@media (max-width: 760px) { .masthead { height: auto; min-height: 70px; gap: 12px; } }

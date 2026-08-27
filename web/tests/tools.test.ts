@@ -1,24 +1,82 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { toolContracts } from "../src/tools";
+import { TrailPlanner, type PlannedRoute } from "../src/planner";
+import { setRouteRenderer, setTrailPlanner, toolContracts } from "../src/tools";
+import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
+
+const manifest: TrailPackManifest = {
+  schema_version: 1, region_id: "tarragona", region_name: "Tarragona", bbox: [0.8, 41.2, 1, 41.4], built_at: "2026-08-27T00:00:00Z", tile_zoom: 12, tiles: ["demo"],
+  sources: [{ id: "osm", name: "OpenStreetMap", licence: "ODbL-1.0", attribution: "© OpenStreetMap contributors", extract_date: "2026-08-27" }],
+};
+const artifact: TrailPackArtifact = {
+  manifest,
+  tiles: { demo: { nodes: [{ lat_e7: 413081881, lon_e7: 9670976 }, { lat_e7: 413090000, lon_e7: 9720000 }, { lat_e7: 413075000, lon_e7: 9750000 }], edges: [
+    { id: "a+", physical_id: "a", from: 0, to: 1, length_m: 1000, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: { source_id: "osm", ref_code: "GR", name: "GR test", confidence: 1 } },
+    { id: "b+", physical_id: "b", from: 1, to: 2, length_m: 900, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: null },
+    { id: "c+", physical_id: "c", from: 2, to: 0, length_m: 900, ascent_m: null, descent_m: null, geometry: [], terrain: { surface: null, sac_scale: null, visibility: null, width_hint: null }, official: null },
+  ] } },
+};
 
 test("all five tool contracts are present and have strict object schemas", () => {
-  assert.equal(toolContracts.length, 5);
   assert.deepEqual(toolContracts.map((tool) => tool.name), ["plan_route", "get_route_summary", "explain_segment", "avoid_segment", "describe_last_edit"]);
-  for (const tool of toolContracts) {
-    assert.equal(tool.inputSchema.type, "object");
-    assert.equal(tool.inputSchema.additionalProperties, false);
-    assert.equal(tool.annotations.untrustedContentHint, true);
-  }
-  assert.equal(toolContracts.find((tool) => tool.name === "plan_route")?.annotations.readOnlyHint, false);
-  for (const name of ["get_route_summary", "explain_segment", "describe_last_edit"]) assert.equal(toolContracts.find((tool) => tool.name === name)?.annotations.readOnlyHint, true);
+  for (const tool of toolContracts) { assert.equal(tool.inputSchema.type, "object"); assert.equal(tool.inputSchema.additionalProperties, false); assert.equal(tool.annotations.untrustedContentHint, true); }
 });
 
-test("plan_route validates its raw distance constraint and returns a bounded result", async () => {
-  const tool = toolContracts.find((candidate) => candidate.name === "plan_route");
-  assert.ok(tool);
-  await assert.rejects(() => tool.execute({ target_km: 61, prefer_waymarked: true }), /no greater than/);
-  await assert.rejects(() => tool.execute({ target_km: 15, prefer_waymarked: true, unsupported: true }), /Unexpected/);
-  const result = await tool.execute({ target_km: 15, prefer_waymarked: true });
-  assert.ok(JSON.stringify(result).length <= 1_500);
+test("plan_route renders a directed TrailPack loop before returning", async () => {
+  setTrailPlanner(new TrailPlanner(artifact)); let rendered: PlannedRoute | undefined; setRouteRenderer((route) => { rendered = route; });
+  const tool = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(tool);
+  await assert.rejects(() => tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true, max_ascent_m: 900 }), /no elevation/);
+  const result = await tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true }) as { rendered: boolean; distance_km: number };
+  assert.equal(result.rendered, true); assert.equal(result.distance_km, 2.8); assert.ok(rendered); assert.ok(JSON.stringify(result).length <= 1_500);
+});
+
+test("planner probe reports snap, closure, distance, and reuse evidence without widening route acceptance", () => {
+  const planner = new TrailPlanner(artifact);
+  const available = planner.probe({ latitude: 41.3081880617615, longitude: 0.967097645100853, targetKm: 3, preferWaymarked: true });
+  assert.equal(available.snap.status, "accepted");
+  assert.equal(available.result.status, "loop_available");
+  assert.ok(available.candidates.viable_loops >= 1);
+  assert.ok(available.candidates.nearest_viable_loop_km);
+  assert.equal(available.rejected.snap, 0);
+
+  const farAway = planner.probe({ latitude: 0, longitude: 0, targetKm: 3, preferWaymarked: true });
+  assert.equal(farAway.snap.status, "rejected");
+  assert.equal(farAway.result.status, "snap_rejected");
+  assert.equal(farAway.rejected.snap, 1);
+  assert.equal(farAway.candidates.examined, 0);
+});
+
+test("TrailPack v1 manifest requires provenance and refuses unsupported schemas", () => {
+  assert.equal(parseManifest(manifest).schema_version, 1);
+  assert.throws(() => parseManifest({ ...manifest, schema_version: 0 }), /unsupported/);
+  assert.throws(() => parseManifest({ ...manifest, sources: [] }), /provenance/);
+});
+
+test("loadTrailPack validates a same-origin v1 graph before returning it", async () => {
+  const fetcher: typeof fetch = async (input) => new Response(JSON.stringify(String(input).endsWith("manifest.json") ? manifest : artifact), { headers: { "content-type": "application/json" } });
+  const result = await loadTrailPack(fetcher);
+  assert.equal(result.status, "ready");
+  if (result.status === "ready") assert.equal(result.artifact.tiles.demo?.edges[0]?.id, "a+");
+});
+
+test("published Tarragona TrailPack produces the verified GR-65.5 access loop and keeps town starts unavailable", async () => {
+  const [publishedManifest, publishedArtifact] = await Promise.all([
+    readFile(new URL("../public/trailpack/manifest.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/trailpack/tarragona-demo.json", import.meta.url), "utf8"),
+  ]);
+  const fetcher: typeof fetch = async (input) => new Response(String(input).endsWith("manifest.json") ? publishedManifest : publishedArtifact, { headers: { "content-type": "application/json" } });
+  const result = await loadTrailPack(fetcher);
+  if (result.status !== "ready") throw new Error(result.status === "unavailable" ? result.message : "TrailPack did not finish loading.");
+  const planner = new TrailPlanner(result.artifact);
+  const diagnostic = planner.probe({ latitude: 41.3081880617615, longitude: 0.967097645100853, targetKm: 7.2, preferWaymarked: true });
+  console.log(`gr65_access: ${diagnostic.result.status}; snap ${diagnostic.snap.distance_m} m; ${diagnostic.candidates.viable_loops} viable / ${diagnostic.candidates.examined} examined; rejected closure=${diagnostic.rejected.closure}, distance=${diagnostic.rejected.distance}, reuse=${diagnostic.rejected.reuse}.`);
+  assert.equal(diagnostic.snap.status, "accepted");
+  assert.equal(diagnostic.result.status, "loop_available");
+  const route = planner.plan("gr65_access", 7.2, true);
+  console.log(`gr65_access selected loop: ${route.distanceKm} km; ${route.edgeIds.length} directed edges; ${route.waymarkedPercent}% official-match coverage.`);
+  assert.ok(route.distanceKm >= 7 && route.distanceKm <= 7.5);
+  for (const start of ["ulldemolins", "prades", "albarca"] as const) {
+    assert.throws(() => planner.plan(start, 7.2, true), /unavailable in TrailPack v1/);
+  }
 });

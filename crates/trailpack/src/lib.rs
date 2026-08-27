@@ -1,4 +1,4 @@
-//! `TrailPack` v0 data types. Data is versioned and attributable; this crate has
+//! `TrailPack` v1 data types. Data is versioned and attributable; this crate has
 //! no filesystem or network I/O.
 
 use std::collections::{BTreeMap, HashSet};
@@ -6,7 +6,10 @@ use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const SUPPORTED_SCHEMA_VERSION: u16 = 0;
+/// Schema v1 makes graph edges genuinely directed. Its string identifiers are
+/// safe to carry through JavaScript without integer precision loss, while a
+/// physical id groups the two travel directions of one path segment.
+pub const SUPPORTED_SCHEMA_VERSION: u16 = 1;
 pub type Bbox = [f64; 4];
 
 /// The limits deliberately bound an artifact accepted by the static browser
@@ -137,7 +140,7 @@ pub struct Tile {
     pub edges: Vec<Edge>,
 }
 
-/// A deterministic, JSON-encoded `TrailPack` v0 artifact.
+/// A deterministic, JSON-encoded `TrailPack` v1 artifact.
 ///
 /// This is intentionally a bounded interchange artifact for static browser
 /// loading. It validates data and provenance, but it does not plan, join, or
@@ -175,7 +178,7 @@ impl TrailPackArtifact {
         self.validate()?;
         let mut canonical = self.clone();
         for tile in canonical.tiles.values_mut() {
-            tile.edges.sort_by_key(|edge| edge.id);
+            tile.edges.sort_by(|left, right| left.id.cmp(&right.id));
         }
         let bytes = serde_json::to_vec(&canonical).map_err(TrailPackError::ArtifactJson)?;
         if bytes.len() > MAX_ARTIFACT_BYTES {
@@ -236,12 +239,18 @@ pub struct Node {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Edge {
-    pub id: u64,
+    /// Stable directed edge identifier. It is a string so browser consumers do
+    /// not lose precision when an upstream identifier exceeds `Number` limits.
+    pub id: String,
+    /// Stable physical-segment identifier, shared by its directed edge pair.
+    pub physical_id: String,
     pub from: u32,
     pub to: u32,
     pub length_m: u32,
-    pub ascent_m: u16,
-    pub descent_m: u16,
+    /// `None` means the source did not provide elevation information.
+    pub ascent_m: Option<u16>,
+    /// `None` means the source did not provide elevation information.
+    pub descent_m: Option<u16>,
     pub geometry: Vec<(i16, i16)>,
     pub terrain: Terrain,
     pub official: Option<OfficialRef>,
@@ -387,11 +396,25 @@ fn validate_tile(tile_id: &str, tile: &Tile, manifest: &Manifest) -> Result<(), 
         }
     }
     for edge in &tile.edges {
+        required_artifact("edge id", &edge.id)?;
+        required_artifact("edge physical_id", &edge.physical_id)?;
         if usize::try_from(edge.from).map_or(true, |index| index >= tile.nodes.len())
             || usize::try_from(edge.to).map_or(true, |index| index >= tile.nodes.len())
         {
             return Err(TrailPackError::InvalidArtifact(format!(
                 "tile `{tile_id}` edge `{}` references a missing node",
+                edge.id
+            )));
+        }
+        if edge.from == edge.to {
+            return Err(TrailPackError::InvalidArtifact(format!(
+                "tile `{tile_id}` edge `{}` must connect distinct nodes",
+                edge.id
+            )));
+        }
+        if edge.length_m == 0 {
+            return Err(TrailPackError::InvalidArtifact(format!(
+                "tile `{tile_id}` edge `{}` must have positive length",
                 edge.id
             )));
         }
@@ -401,7 +424,7 @@ fn validate_tile(tile_id: &str, tile: &Tile, manifest: &Manifest) -> Result<(), 
                 edge.id
             )));
         }
-        if !edge_ids.insert(edge.id) {
+        if !edge_ids.insert(&edge.id) {
             return Err(TrailPackError::InvalidArtifact(format!(
                 "tile `{tile_id}` contains duplicate edge id `{}`",
                 edge.id
@@ -422,6 +445,17 @@ fn required(field: &str, value: &str) -> Result<(), TrailPackError> {
         Ok(())
     }
 }
+
+fn required_artifact(field: &str, value: &str) -> Result<(), TrailPackError> {
+    if value.trim().is_empty() {
+        Err(TrailPackError::InvalidArtifact(format!(
+            "{field} is required"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_bbox([west, south, east, north]: Bbox) -> Result<(), TrailPackError> {
     if ![west, south, east, north]
         .iter()
@@ -443,7 +477,7 @@ fn validate_bbox([west, south, east, north]: Bbox) -> Result<(), TrailPackError>
 #[cfg(test)]
 mod tests {
     use super::*;
-    const MANIFEST: &str = r#"{"schema_version":0,"region_id":"es-cat-t","region_name":"Tarragona","bbox":[0.16,40.51,1.67,41.42],"built_at":"2026-08-28T09:00:00Z","tile_zoom":10,"tiles":["120"],"sources":[{"id":"osm","name":"OpenStreetMap","licence":"ODbL-1.0","attribution":"© OpenStreetMap contributors","extract_date":"2026-08-26"}]}"#;
+    const MANIFEST: &str = r#"{"schema_version":1,"region_id":"es-cat-t","region_name":"Tarragona","bbox":[0.16,40.51,1.67,41.42],"built_at":"2026-08-28T09:00:00Z","tile_zoom":10,"tiles":["120"],"sources":[{"id":"osm","name":"OpenStreetMap","licence":"ODbL-1.0","attribution":"© OpenStreetMap contributors","extract_date":"2026-08-26"}]}"#;
     #[test]
     fn reads_attribution_from_data() {
         let manifest = Manifest::from_json(MANIFEST).unwrap();
@@ -455,13 +489,13 @@ mod tests {
     #[test]
     fn refuses_unknown_schema_before_use() {
         let error =
-            Manifest::from_json(&MANIFEST.replace("\"schema_version\":0", "\"schema_version\":1"))
+            Manifest::from_json(&MANIFEST.replace("\"schema_version\":1", "\"schema_version\":0"))
                 .unwrap_err();
         assert!(matches!(
             error,
             TrailPackError::UnsupportedSchema {
-                found: 1,
-                supported: 0
+                found: 0,
+                supported: 1
             }
         ));
     }
@@ -500,12 +534,13 @@ mod tests {
             ],
             edges: vec![
                 Edge {
-                    id: 20,
+                    id: "osm-way-20:segment-0:forward".into(),
+                    physical_id: "osm-way-20:segment-0".into(),
                     from: 0,
                     to: 1,
                     length_m: 120,
-                    ascent_m: 4,
-                    descent_m: 0,
+                    ascent_m: Some(4),
+                    descent_m: Some(0),
                     geometry: vec![],
                     terrain: Terrain::default(),
                     official: Some(OfficialRef {
@@ -518,12 +553,13 @@ mod tests {
                     }),
                 },
                 Edge {
-                    id: 10,
+                    id: "osm-way-20:segment-0:reverse".into(),
+                    physical_id: "osm-way-20:segment-0".into(),
                     from: 1,
                     to: 0,
                     length_m: 120,
-                    ascent_m: 0,
-                    descent_m: 4,
+                    ascent_m: Some(0),
+                    descent_m: Some(4),
                     geometry: vec![],
                     terrain: Terrain::default(),
                     official: None,
@@ -543,8 +579,14 @@ mod tests {
 
         let decoded = TrailPackArtifact::from_json_bytes(&first).unwrap();
         assert_eq!(decoded.manifest, artifact.manifest);
-        assert_eq!(decoded.tiles["120"].edges[0].id, 10);
-        assert_eq!(decoded.tiles["120"].edges[1].id, 20);
+        assert_eq!(
+            decoded.tiles["120"].edges[0].id,
+            "osm-way-20:segment-0:forward"
+        );
+        assert_eq!(
+            decoded.tiles["120"].edges[1].id,
+            "osm-way-20:segment-0:reverse"
+        );
     }
 
     #[test]
@@ -570,5 +612,42 @@ mod tests {
             TrailPackArtifact::new(manifest(), BTreeMap::from([("120".into(), bad_tile)])),
             Err(TrailPackError::InvalidArtifact(_))
         ));
+    }
+
+    #[test]
+    fn v1_preserves_unknown_elevation_as_null() {
+        let mut source_tile = tile();
+        source_tile.edges[0].ascent_m = None;
+        source_tile.edges[0].descent_m = None;
+        let artifact =
+            TrailPackArtifact::new(manifest(), BTreeMap::from([("120".into(), source_tile)]))
+                .unwrap();
+
+        let json = String::from_utf8(artifact.to_json_bytes().unwrap()).unwrap();
+        assert!(json.contains("\"ascent_m\":null"));
+        assert!(json.contains("\"descent_m\":null"));
+    }
+
+    #[test]
+    fn v1_rejects_empty_ids_zero_length_and_self_loops() {
+        let cases = [
+            ("", "physical-1", 120, 0, 1),
+            ("edge-1", "", 120, 0, 1),
+            ("edge-1", "physical-1", 0, 0, 1),
+            ("edge-1", "physical-1", 120, 0, 0),
+        ];
+
+        for (id, physical_id, length_m, from, to) in cases {
+            let mut invalid = tile();
+            invalid.edges[0].id = id.into();
+            invalid.edges[0].physical_id = physical_id.into();
+            invalid.edges[0].length_m = length_m;
+            invalid.edges[0].from = from;
+            invalid.edges[0].to = to;
+            assert!(matches!(
+                TrailPackArtifact::new(manifest(), BTreeMap::from([("120".into(), invalid)])),
+                Err(TrailPackError::InvalidArtifact(_))
+            ));
+        }
     }
 }

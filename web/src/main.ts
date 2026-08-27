@@ -1,102 +1,66 @@
 import "./style.css";
-import { demoRoute, toolContracts } from "./tools";
+import { documentedStarts, setRouteRenderer, setTrailPackProvenance, setTrailPlanner, toolContracts } from "./tools";
+import { TrailPlanner, type PlannedRoute } from "./planner";
+import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { registerWebMcpTools } from "./webmcp";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing application root.");
-
 const bridge = { status: "unavailable" as "unavailable" | "registered", count: 0 };
-let routeReady = false;
-void registerWebMcpTools(false);
 let logSequence = 0;
+void registerWebMcpTools(true);
 
 app.innerHTML = `
   <main class="shell">
-    <header class="masthead">
-      <a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a>
-      <div class="status"><i class="status-dot ${bridge.status}"></i><span>${bridge.status === "registered" ? "WebMCP connected" : "Browser demo mode"}</span></div>
-      <button class="plain-button" id="register" type="button">${bridge.status === "registered" ? `${bridge.count} tools live` : "Check model context"}</button>
-    </header>
-    <section class="intro" aria-labelledby="intro-title">
-      <p class="eyebrow">Trail intelligence, made inspectable</p>
-      <h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1>
-      <p class="lede">A WebMCP-native route planner for the places where a paper map still matters. This live MVP follows a Montsant–Siurana loop from evidence to TrailPack.</p>
-    </section>
+    <header class="masthead"><a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a><div class="status"><i class="status-dot ${bridge.status}"></i><span>${bridge.status === "registered" ? "WebMCP connected" : "Browser demo mode"}</span></div><button class="plain-button" id="register" type="button">Check model context</button></header>
+    <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
-      <aside class="planner">
-        <div class="section-label"><span>01</span><p>Route brief</p></div>
-        <form id="plan-form">
-          <label>Starting point<input id="start" name="start" value="Cornudella de Montsant" maxlength="120" required /></label>
-          <label>Maximum distance <span class="field-value"><output id="distance-value">15</output> km</span><input id="distance" name="distance" type="range" min="6" max="30" value="15" /></label>
-          <fieldset><legend>Route character</legend><div class="choices"><label><input type="radio" name="character" value="ridge" checked /> Ridge</label><label><input type="radio" name="character" value="water" /> Water</label><label><input type="radio" name="character" value="quiet" /> Quiet</label></div></fieldset>
-          <button class="plan-button" type="submit">Generate loop <span>↗</span></button>
-        </form>
-        <div class="evidence"><p class="eyebrow">Data provenance</p><strong>${demoRoute.source}</strong><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">${demoRoute.attribution} ↗</a></div>
+      <aside class="planner"><div class="section-label"><span>01</span><p>Route brief</p></div>
+        <form id="plan-form"><label for="start">Route start<select id="start" name="start">${Object.values(documentedStarts).map((start) => `<option value="${start.id}"${start.availability === "unavailable" ? " disabled" : " selected"}>${start.name}${start.availability === "unavailable" ? " — unavailable in v1" : ""}</option>`).join("")}</select></label><p class="field-hint" id="start-hint">GR-65.5 trail access is a verified on-trail coordinate, not a town or trailhead. Town starts remain visible until their access connectors are vetted.</p><label for="distance">Target distance <span class="field-value"><output id="distance-value">7.2</output> km</span><input id="distance" name="distance" type="range" min="2" max="30" step="0.1" value="7.2" /></label><fieldset><legend>Route character</legend><div class="choices"><label><input type="radio" name="character" value="waymarked" checked /> Waymarked</label><label><input type="radio" name="character" value="neutral" /> Neutral</label></div></fieldset><p class="field-hint">Elevation and grade constraints are not sent: this TrailPack has no elevation values and incomplete grade tags.</p><button class="plan-button" type="submit">Generate data-backed loop <span>↗</span></button></form>
+        <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
-      <section class="map-panel" aria-label="Demo route map">
-        <div class="map-grain"></div><div class="contours"><i></i><i></i><i></i><i></i><i></i></div>
-        <svg class="route-line" viewBox="0 0 640 520" aria-hidden="true"><path d="M478 403 C388 355 311 250 245 186 C202 142 145 165 133 224 C115 315 237 395 352 396 C440 397 489 360 478 403" /></svg>
-        <span class="place place-one">Cornudella</span><span class="place place-two">Montsant</span><span class="place place-three">Siurana</span>
-        <div class="map-key"><span><i class="route-swatch"></i> Proposed loop</span><span>Demo TrailPack</span></div>
-        <article class="route-card" id="route-card" aria-live="polite">
-          <p class="eyebrow">Current proposal</p><h2>${demoRoute.name}</h2>
-          <dl><div><dt>Distance</dt><dd>${demoRoute.distanceKm} km</dd></div><div><dt>Climb</dt><dd>${demoRoute.ascentM} m</dd></div><div><dt>Moving time</dt><dd>${demoRoute.durationHours} h</dd></div></dl>
-          <p class="route-note">${demoRoute.highlights[0]} · ${demoRoute.highlights[1]}</p>
-        </article>
-      </section>
+    <section class="map-panel" aria-label="TrailPack route preview"><div class="map-grain"></div><div class="contours" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><svg class="route-line" viewBox="0 0 640 520" aria-hidden="true"><path id="route-path" d="" /></svg><span class="place place-one">Cornudella</span><span class="place place-two">Montsant</span><span class="place place-three">Siurana</span><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Waiting for graph</p><h2 id="route-name">Use the verified GR-65.5 access</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">A loop is rendered only after the directed TrailPack graph has found one.</p></article></section>
     </section>
-    <section class="tooling" aria-labelledby="tools-title">
-      <div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Five small tools.<br>One accountable route.</h2></div>
-      <div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>0${index + 1}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div>
-    </section>
+    <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Five small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>0${index + 1}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
   </main>`;
 
 const log = document.querySelector<HTMLOListElement>("#log");
-const addLog = (name: string, input: unknown, result: unknown, error?: unknown) => {
-  if (!log) return;
-  log.querySelector(".empty")?.remove();
-  const item = document.createElement("li");
-  item.innerHTML = `<span>${String(++logSequence).padStart(2, "0")}</span><div><strong>${name}</strong><code>${error ? `Error: ${error instanceof Error ? error.message : String(error)}` : JSON.stringify({ input, result }, null, 0)}</code></div>`;
-  log.prepend(item);
+const addLog = (name: string, input: unknown, result: unknown, error?: unknown): void => {
+  if (!log) return; log.querySelector(".empty")?.remove();
+  const item = document.createElement("li"); const sequence = document.createElement("span"); sequence.textContent = String(++logSequence).padStart(2, "0");
+  const details = document.createElement("div"); const heading = document.createElement("strong"); heading.textContent = name; const output = document.createElement("code"); output.textContent = error ? `Error: ${error instanceof Error ? error.message : String(error)}` : JSON.stringify({ input, result }); details.append(heading, output); item.append(sequence, details); log.prepend(item);
 };
 
-async function invoke(name: string, input: Record<string, unknown>) {
-  const tool = toolContracts.find((candidate) => candidate.name === name);
-  if (!tool) return;
-  const controller = new AbortController();
-  try {
-    const result = await tool.execute(input, controller.signal);
-    addLog(name, input, result);
-    const card = document.querySelector<HTMLElement>("#route-card");
-    if (card) {
-      card.dataset.lastAction = name;
-      const note = card.querySelector<HTMLElement>(".route-note");
-      if (note) note.textContent = `${name.replaceAll("_", " ")} completed — inspect the invocation log for its bounded response.`;
-    }
-    if (name === "plan_route" && !routeReady) { routeReady = true; void registerWebMcpTools(true); }
-  }
-  catch (error) { addLog(name, input, null, error); }
+function renderRoute(route: PlannedRoute): void {
+  const state = document.querySelector<HTMLElement>("#route-state"); const path = document.querySelector<SVGPathElement>("#route-path");
+  const name = document.querySelector<HTMLElement>("#route-name"); const distance = document.querySelector<HTMLElement>("#route-distance"); const duration = document.querySelector<HTMLElement>("#route-duration"); const kicker = document.querySelector<HTMLElement>("#route-kicker"); const note = document.querySelector<HTMLElement>("#route-note");
+  if (state) state.textContent = "Directed TrailPack loop"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Graph-planned loop"; if (note) note.textContent = `${route.waymarkedPercent}% official-match coverage. Elevation unknown; verify current local conditions.`;
+  const [west, south, east, north] = currentManifestBbox;
+  const project = ([latitude, longitude]: [number, number]): [number, number] => [((longitude - west) / (east - west)) * 640, (1 - (latitude - south) / (north - south)) * 520];
+  const points = route.coordinates.map(project);
+  if (path && points.length > 1) path.setAttribute("d", points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" "));
 }
+let currentManifestBbox: [number, number, number, number] = [0.86, 41.23, 0.99, 41.34];
+setRouteRenderer(renderRoute);
 
-document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const maxDistanceKm = Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 15);
-  void invoke("plan_route", { target_km: maxDistanceKm, max_ascent_m: 900, max_grade: "T3", prefer_waymarked: true });
-});
-document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => {
-  const value = (event.currentTarget as HTMLInputElement).value;
-  const output = document.querySelector<HTMLOutputElement>("#distance-value");
-  if (output) output.value = value;
-});
-document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => {
-  const name = button.dataset.tool ?? "";
-  const inputs: Record<string, Record<string, unknown>> = {
-    plan_route: { target_km: 15, max_ascent_m: 900, max_grade: "T3", prefer_waymarked: true }, get_route_summary: {}, explain_segment: { segment_name: "Roca Corbatera ridge" }, avoid_segment: { segment_name: "Siurana connector" }, describe_last_edit: {},
-  };
-  void invoke(name, inputs[name] ?? {});
-}));
-document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", async () => {
-  const next = await registerWebMcpTools(routeReady);
-  addLog("webmcp_registration", { requested: true, routeReady }, next);
-});
+function renderTrailPack(state: TrailPackLoadState): void {
+  const status = document.querySelector<HTMLElement>("#trailpack-status"); const region = document.querySelector<HTMLElement>("#trailpack-region"); const sources = document.querySelector<HTMLUListElement>("#trailpack-sources"); const mapLabel = document.querySelector<HTMLElement>("#map-data-label");
+  if (!status || !region || !sources || !mapLabel || state.status === "loading") return;
+  sources.replaceChildren();
+  if (state.status === "unavailable") { status.className = "data-status unavailable"; status.textContent = `TrailPack unavailable — ${state.message}`; region.textContent = "No graph loaded"; mapLabel.textContent = "Graph unavailable"; return; }
+  currentManifestBbox = state.manifest.bbox; setTrailPackProvenance(`${state.manifest.region_name} TrailPack`, state.manifest.sources.map((source) => source.attribution)); setTrailPlanner(new TrailPlanner(state.artifact));
+  status.className = "data-status ready"; status.textContent = "Static directed TrailPack graph loaded."; region.textContent = state.manifest.region_name; mapLabel.textContent = "TrailPack v1 loaded";
+  for (const source of state.manifest.sources) { const item = document.createElement("li"); item.textContent = `${source.attribution} · ${source.licence}`; sources.append(item); }
+}
+void loadTrailPack().then(renderTrailPack);
+
+async function invoke(name: string, input: Record<string, unknown>): Promise<void> {
+  const tool = toolContracts.find((candidate) => candidate.name === name); if (!tool) return;
+  try { const result = await tool.execute(input, new AbortController().signal); addLog(name, input, result); } catch (error) { addLog(name, input, null, error); }
+}
+const planInput = (): Record<string, unknown> => ({ start: document.querySelector<HTMLSelectElement>("#start")?.value ?? "gr65_access", target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7.2), prefer_waymarked: document.querySelector<HTMLInputElement>("input[name=character]:checked")?.value === "waymarked" });
+document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); void invoke("plan_route", planInput()); });
+document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => { const output = document.querySelector<HTMLOutputElement>("#distance-value"); if (output) output.value = (event.currentTarget as HTMLInputElement).value; });
+document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
+document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", async () => { const next = await registerWebMcpTools(true); addLog("webmcp_registration", { requested: true }, next); });

@@ -2,6 +2,20 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.4] - 2026-08-27
+
+### Added
+
+- TrailPack v1: a connected, directed offline graph that splits OSM ways into adjacent-node walking segments, honors access and pedestrian one-way restrictions, and uses shared physical-segment IDs to prevent disguised out-and-back routes.
+- Browser-side TypeScript routing over the loaded static TrailPack, with artifact validation, bounded diagnostics, route rendering before tool results, and explicit rejection for unsupported elevation or grade constraints.
+- A real, deterministic 7.2 km non-retracing loop from the verified GR-65.5 on-trail access coordinate. Named town starts remain disabled until their access connectors are vetted.
+- Q8 distance-and-bearing evidence reporting: 70.7% of official trace length meets the 20 m and 30-degree thresholds. This is evidence only and does not meet the 80% pass bar.
+
+### Changed
+
+- Replaced the illustrative `plan_route` response with graph-backed route planning at the available verified access point; WebMCP keeps all five tools discoverable from page load.
+- Bumped the Rust workspace and web application versions from `0.1.3` to `0.1.4`.
+
 ## [0.1.3] - 2026-08-27
 
 ### Added

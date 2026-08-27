@@ -57,6 +57,25 @@ impl Access {
     }
 }
 
+/// Legal traversal direction encoded by OSM one-way tags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TraversalDirection {
+    Both,
+    Forward,
+    Reverse,
+}
+
+impl TraversalDirection {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "no" | "0" | "false" => Some(Self::Both),
+            "yes" | "1" | "true" => Some(Self::Forward),
+            "-1" => Some(Self::Reverse),
+            _ => None,
+        }
+    }
+}
+
 /// A constrained surface classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
@@ -178,6 +197,10 @@ impl TrackType {
 pub struct RoutingTags {
     pub foot: Option<Access>,
     pub access: Option<Access>,
+    /// `oneway:foot`, which takes priority over the general `oneway` tag.
+    pub oneway_foot: Option<TraversalDirection>,
+    /// General `oneway` fallback when there is no foot-specific value.
+    pub oneway: Option<TraversalDirection>,
     pub surface: Option<Surface>,
     pub sac_scale: Option<SacScale>,
     pub trail_visibility: Option<TrailVisibility>,
@@ -423,6 +446,8 @@ fn routing_tags<'a>(tags: impl IntoIterator<Item = (&'a str, &'a str)>) -> Routi
         match key {
             "foot" => safe.foot = Access::parse(value),
             "access" => safe.access = Access::parse(value),
+            "oneway:foot" => safe.oneway_foot = TraversalDirection::parse(value),
+            "oneway" => safe.oneway = TraversalDirection::parse(value),
             "surface" => safe.surface = Surface::parse(value),
             "sac_scale" => safe.sac_scale = SacScale::parse(value),
             "trail_visibility" => safe.trail_visibility = TrailVisibility::parse(value),
@@ -479,6 +504,8 @@ mod tests {
         let tags = routing_tags([
             ("foot", "designated"),
             ("access", "private"),
+            ("oneway", "-1"),
+            ("oneway:foot", "no"),
             ("surface", "fine_gravel"),
             ("sac_scale", "mountain_hiking"),
             ("trail_visibility", "good"),
@@ -490,6 +517,8 @@ mod tests {
         ]);
         assert_eq!(tags.foot, Some(Access::Designated));
         assert_eq!(tags.access, Some(Access::Private));
+        assert_eq!(tags.oneway, Some(TraversalDirection::Reverse));
+        assert_eq!(tags.oneway_foot, Some(TraversalDirection::Both));
         assert_eq!(tags.surface, Some(Surface::FineGravel));
         assert_eq!(tags.sac_scale, Some(SacScale::MountainHiking));
         assert_eq!(tags.trail_visibility, Some(TrailVisibility::Good));

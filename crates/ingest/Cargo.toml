@@ -1,0 +1,13 @@
+[package]
+name = "switchback-ingest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Offline official-trail adapters for Switchback"
+
+[dependencies]
+switchback-trailpack = { path = "../trailpack" }
+
+[lints]
+workspace = true

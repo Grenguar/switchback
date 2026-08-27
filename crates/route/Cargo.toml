@@ -1,0 +1,13 @@
+[package]
+name = "switchback-route"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure deterministic spine-and-connectors hiking loop routing"
+
+[dependencies]
+thiserror = "2.0"
+
+[lints]
+workspace = true

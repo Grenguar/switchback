@@ -1,0 +1,8 @@
+# Hand-authored Tarragona-like geometry for the offline Tier 1 smoke test.
+# Records: edge,id,start_lat,start_lon,end_lat,end_lon | trace,lat,lon | max_distance_m,value
+edge,101,41.2000,0.8001,41.2100,0.8001
+edge,102,41.2100,0.8001,41.2200,0.8001
+trace,41.2000,0.8000
+trace,41.2100,0.8000
+trace,41.2200,0.8000
+max_distance_m,50

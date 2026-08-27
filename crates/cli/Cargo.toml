@@ -1,0 +1,13 @@
+[package]
+name = "switchback-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Offline metrics CLI for Switchback fixtures and local extracts"
+
+[dependencies]
+switchback-matcher = { path = "../matcher" }
+
+[lints]
+workspace = true

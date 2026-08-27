@@ -1,0 +1,34 @@
+# Dependencies and package-manager state
+node_modules/
+web/node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+
+# Frontend builds and test artefacts
+dist/
+web/dist/
+coverage/
+playwright-report/
+test-results/
+.playwright-mcp/
+
+# Rust builds and local generated TrailPacks
+target/
+*.trailpack/
+trailpacks/
+data/derived/
+
+# Environment, credentials, and local deployment state
+.env
+.env.*
+!.env.example
+.netlify/
+.agents/
+skills-lock.json
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.swp

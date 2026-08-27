@@ -2,17 +2,17 @@ import "./style.css";
 import { documentedStarts, setRouteRenderer, setTrailPackProvenance, setTrailPlanner, toolContracts } from "./tools";
 import { TrailPlanner, type PlannedRoute } from "./planner";
 import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
-import { registerWebMcpTools } from "./webmcp";
+import { registerWebMcpTools, type BridgeStatus } from "./webmcp";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing application root.");
-const bridge = { status: "unavailable" as "unavailable" | "registered", count: 0 };
+const bridge = { status: "unavailable" as BridgeStatus, count: 0 };
 let logSequence = 0;
-void registerWebMcpTools(true);
 
 app.innerHTML = `
   <main class="shell">
-    <header class="masthead"><a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a><div class="status"><i class="status-dot ${bridge.status}"></i><span>${bridge.status === "registered" ? "WebMCP connected" : "Browser demo mode"}</span></div><button class="plain-button" id="register" type="button">Check model context</button></header>
+    <header class="masthead"><a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a><div class="status"><i class="status-dot ${bridge.status}" id="bridge-dot"></i><span id="bridge-label">Checking WebMCP…</span></div><button class="plain-button" id="register" type="button">Check model context</button></header>
+    <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p></section>
     <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
       <aside class="planner"><div class="section-label"><span>01</span><p>Route brief</p></div>
@@ -26,6 +26,28 @@ app.innerHTML = `
   </main>`;
 
 const log = document.querySelector<HTMLOListElement>("#log");
+const bridgeCopy: Record<BridgeStatus, { label: string; next: string }> = {
+  unavailable: { label: "Browser demo mode", next: "No browser model context was exposed. Open this page in a WebMCP-capable agent browser, then check again." },
+  registered: { label: "WebMCP connected", next: "Tools are registered on this page. Ask your agent to discover the site tools and call plan_route." },
+  failed: { label: "WebMCP registration failed", next: "The browser exposed a model context but did not accept all tools. Check the message, reload the page, then try again." },
+};
+function renderBridgeStatus(result: { status: BridgeStatus; count: number; message: string }): void {
+  bridge.status = result.status; bridge.count = result.count;
+  const dot = document.querySelector<HTMLElement>("#bridge-dot"); const label = document.querySelector<HTMLElement>("#bridge-label"); const status = document.querySelector<HTMLElement>("#model-context-status"); const next = document.querySelector<HTMLElement>("#model-context-next"); const button = document.querySelector<HTMLButtonElement>("#register");
+  if (dot) dot.className = `status-dot ${result.status}`;
+  if (label) label.textContent = bridgeCopy[result.status].label;
+  if (status) status.textContent = result.message;
+  if (next) next.textContent = bridgeCopy[result.status].next;
+  if (button) button.textContent = result.status === "registered" ? "Recheck model context" : "Check model context";
+}
+async function checkModelContext(): Promise<void> {
+  const button = document.querySelector<HTMLButtonElement>("#register");
+  if (button) { button.disabled = true; button.textContent = "Checking…"; }
+  const result = await registerWebMcpTools(true);
+  renderBridgeStatus(result);
+  addLog("webmcp_registration", { requested: true }, result, result.status === "failed" ? result.message : undefined);
+  if (button) button.disabled = false;
+}
 const addLog = (name: string, input: unknown, result: unknown, error?: unknown): void => {
   if (!log) return; log.querySelector(".empty")?.remove();
   const item = document.createElement("li"); const sequence = document.createElement("span"); sequence.textContent = String(++logSequence).padStart(2, "0");
@@ -63,4 +85,5 @@ const planInput = (): Record<string, unknown> => ({ start: document.querySelecto
 document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); void invoke("plan_route", planInput()); });
 document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => { const output = document.querySelector<HTMLOutputElement>("#distance-value"); if (output) output.value = (event.currentTarget as HTMLInputElement).value; });
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
-document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", async () => { const next = await registerWebMcpTools(true); addLog("webmcp_registration", { requested: true }, next); });
+document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
+void checkModelContext();

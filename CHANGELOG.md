@@ -2,6 +2,19 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.5] - 2026-08-27
+
+### Added
+
+- A visible, accessible WebMCP status panel that reports whether this browser exposes a model context, how many tools registered, and what to do next.
+- Registration diagnostics for unavailable, successful, and partial-failure browser contexts.
+- Focused WebMCP registration tests covering those three outcomes.
+
+### Changed
+
+- The model-context check now updates the header and status panel immediately instead of leaving its result only in the lower invocation log.
+- Bumped the Rust workspace and web application versions from `0.1.4` to `0.1.5`.
+
 ## [0.1.4] - 2026-08-27
 
 ### Added

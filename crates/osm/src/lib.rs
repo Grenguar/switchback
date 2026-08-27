@@ -4,8 +4,9 @@
 //! forwards arbitrary OpenStreetMap text such as names, descriptions, notes,
 //! URLs, or user identifiers into a `TrailPack`.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::io::Read;
+use std::io::{Read, Seek};
 
 use osmpbfreader::{OsmObj, OsmPbfReader};
 
@@ -214,6 +215,62 @@ pub struct WalkableExtract {
     pub stats: ExtractionStats,
 }
 
+/// A WGS84 coordinate in OSM's native decimicro-degree representation.
+///
+/// Keeping the source integer representation avoids rounding drift while
+/// building a deterministic routing graph. Use [`GeoPoint::latitude`] and
+/// [`GeoPoint::longitude`] only when a floating point representation is
+/// required at an application boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GeoPoint {
+    pub decimicro_lat: i32,
+    pub decimicro_lon: i32,
+}
+
+impl GeoPoint {
+    /// Returns the latitude in WGS84 degrees.
+    #[must_use]
+    pub fn latitude(self) -> f64 {
+        f64::from(self.decimicro_lat) * 1e-7
+    }
+
+    /// Returns the longitude in WGS84 degrees.
+    #[must_use]
+    pub fn longitude(self) -> f64 {
+        f64::from(self.decimicro_lon) * 1e-7
+    }
+}
+
+/// One walkable way whose ordered node references were resolved to geometry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaterializedWay {
+    pub way: WalkableWay,
+    /// The full ordered geometry, with one coordinate for every `node_ids`
+    /// entry on [`Self::way`].
+    pub geometry: Vec<GeoPoint>,
+}
+
+/// Counts from the coordinate-resolution pass.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct GeometryStats {
+    /// Distinct node IDs referenced by retained pedestrian ways.
+    pub referenced_nodes: u64,
+    /// Referenced node IDs found in the source PBF.
+    pub resolved_nodes: u64,
+    /// Ways with complete ordered geometry.
+    pub resolved_ways: u64,
+    /// Ways omitted because at least one referenced node was not present.
+    pub unresolved_ways: u64,
+}
+
+/// A safe walkable extract with coordinate-resolved routing geometry.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct WalkableGeometryExtract {
+    pub ways: Vec<MaterializedWay>,
+    pub extraction: ExtractionStats,
+    pub geometry: GeometryStats,
+}
+
 /// An error while decoding a local OSM PBF stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PbfReadError(String);
@@ -234,6 +291,71 @@ impl std::error::Error for PbfReadError {}
 /// OSM PBF file.
 pub fn read_walkable_ways(reader: impl Read) -> Result<WalkableExtract, PbfReadError> {
     let mut pbf = OsmPbfReader::new(reader);
+    read_walkable_ways_from_pbf(&mut pbf)
+}
+
+/// Decode a local PBF twice to retain walkable ways and resolve their geometry.
+///
+/// The first pass applies the same strict way and tag filtering as
+/// [`read_walkable_ways`], retaining only accepted ways and their node IDs.
+/// The second pass keeps coordinates only for those referenced IDs. This means
+/// memory grows with the routing candidate set rather than all nodes in the
+/// PBF, and source ordering cannot affect the returned way ordering.
+///
+/// Ways whose full geometry cannot be resolved are omitted and reported in
+/// [`GeometryStats::unresolved_ways`].
+///
+/// # Errors
+///
+/// Returns [`PbfReadError`] when either decoding pass or the rewind between
+/// passes fails.
+pub fn read_walkable_geometry(
+    reader: impl Read + Seek,
+) -> Result<WalkableGeometryExtract, PbfReadError> {
+    let mut pbf = OsmPbfReader::new(reader);
+    let extract = read_walkable_ways_from_pbf(&mut pbf)?;
+
+    let required_nodes: BTreeSet<_> = extract
+        .ways
+        .iter()
+        .flat_map(|way| way.node_ids.iter().copied())
+        .collect();
+    let mut output = WalkableGeometryExtract {
+        extraction: extract.stats,
+        geometry: GeometryStats {
+            referenced_nodes: required_nodes.len() as u64,
+            ..GeometryStats::default()
+        },
+        ..WalkableGeometryExtract::default()
+    };
+
+    pbf.rewind()
+        .map_err(|error| PbfReadError(error.to_string()))?;
+    let mut coordinates = BTreeMap::new();
+    for object in pbf.iter() {
+        let object = object.map_err(|error| PbfReadError(error.to_string()))?;
+        let OsmObj::Node(node) = object else {
+            continue;
+        };
+        let id = node.id.0;
+        if required_nodes.contains(&id) {
+            coordinates.insert(
+                id,
+                GeoPoint {
+                    decimicro_lat: node.decimicro_lat,
+                    decimicro_lon: node.decimicro_lon,
+                },
+            );
+        }
+    }
+    output.geometry.resolved_nodes = coordinates.len() as u64;
+    materialize_ways(extract.ways, &coordinates, &mut output);
+    Ok(output)
+}
+
+fn read_walkable_ways_from_pbf<R: Read>(
+    pbf: &mut OsmPbfReader<R>,
+) -> Result<WalkableExtract, PbfReadError> {
     let mut extract = WalkableExtract::default();
 
     for object in pbf.iter() {
@@ -273,6 +395,26 @@ pub fn read_walkable_ways(reader: impl Read) -> Result<WalkableExtract, PbfReadE
     }
     extract.ways.sort_by_key(|way| way.id);
     Ok(extract)
+}
+
+fn materialize_ways(
+    ways: Vec<WalkableWay>,
+    coordinates: &BTreeMap<i64, GeoPoint>,
+    output: &mut WalkableGeometryExtract,
+) {
+    for way in ways {
+        let geometry: Option<Vec<_>> = way
+            .node_ids
+            .iter()
+            .map(|node_id| coordinates.get(node_id).copied())
+            .collect();
+        let Some(geometry) = geometry else {
+            output.geometry.unresolved_ways += 1;
+            continue;
+        };
+        output.ways.push(MaterializedWay { way, geometry });
+        output.geometry.resolved_ways += 1;
+    }
 }
 
 fn routing_tags<'a>(tags: impl IntoIterator<Item = (&'a str, &'a str)>) -> RoutingTags {
@@ -380,5 +522,48 @@ mod tests {
             Some(WalkableHighway::Track)
         );
         assert_eq!(WalkableHighway::parse("residential"), None);
+    }
+
+    #[test]
+    fn materialization_keeps_complete_geometry_in_way_order() {
+        let first = WalkableWay {
+            id: 10,
+            highway: WalkableHighway::Path,
+            node_ids: vec![1, 2],
+            tags: RoutingTags::default(),
+        };
+        let missing = WalkableWay {
+            id: 11,
+            highway: WalkableHighway::Track,
+            node_ids: vec![2, 3],
+            tags: RoutingTags::default(),
+        };
+        let coordinates = BTreeMap::from([
+            (
+                1,
+                GeoPoint {
+                    decimicro_lat: 412_345_678,
+                    decimicro_lon: 12_345_678,
+                },
+            ),
+            (
+                2,
+                GeoPoint {
+                    decimicro_lat: 412_345_679,
+                    decimicro_lon: 12_345_679,
+                },
+            ),
+        ]);
+        let mut output = WalkableGeometryExtract::default();
+
+        materialize_ways(vec![first, missing], &coordinates, &mut output);
+
+        assert_eq!(output.geometry.resolved_ways, 1);
+        assert_eq!(output.geometry.unresolved_ways, 1);
+        assert_eq!(output.ways.len(), 1);
+        assert_eq!(output.ways[0].way.id, 10);
+        assert_eq!(output.ways[0].geometry.len(), 2);
+        assert!((output.ways[0].geometry[0].latitude() - 41.234_567_8).abs() < f64::EPSILON);
+        assert!((output.ways[0].geometry[1].longitude() - 1.234_567_9).abs() < f64::EPSILON);
     }
 }

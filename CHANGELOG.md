@@ -2,6 +2,18 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.3] - 2026-08-27
+
+### Added
+
+- Deterministic two-pass OSM geometry resolution that keeps coordinates only for node IDs used by safe walkable routing candidates and reports incomplete ways explicitly.
+- A validated, deterministic static TrailPack JSON artifact with browser-size limits, exact manifest/tile indexing, graph-reference checks, and provenance enforcement.
+
+### Changed
+
+- Extended OSM inspection to report resolved ways and nodes from the actual PBF input rather than only tag-filter counts.
+- Bumped the Rust workspace and web application versions from `0.1.2` to `0.1.3`.
+
 ## [0.1.2] - 2026-08-27
 
 ### Added

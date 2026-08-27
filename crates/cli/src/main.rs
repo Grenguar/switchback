@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use switchback_ingest::CnigFedmeSource;
 use switchback_matcher::{GraphEdge, Point, match_polyline};
-use switchback_osm::read_walkable_ways;
+use switchback_osm::read_walkable_geometry;
 use switchback_trailpack::OfficialTrailSource;
 
 fn main() -> ExitCode {
@@ -103,14 +103,18 @@ fn inspect_cnig(path: &str) -> Result<String, String> {
 fn inspect_osm(path: &str) -> Result<String, String> {
     let input =
         fs::File::open(path).map_err(|error| format!("could not read `{path}`: {error}"))?;
-    let extract = read_walkable_ways(input).map_err(|error| error.to_string())?;
+    let extract = read_walkable_geometry(input).map_err(|error| error.to_string())?;
     Ok(format!(
-        "osm-inspect scanned_ways={} walkable_ways={} paths={} footways={} tracks={}",
-        extract.stats.scanned_ways,
-        extract.stats.emitted_ways,
-        extract.stats.paths,
-        extract.stats.footways,
-        extract.stats.tracks
+        "osm-inspect scanned_ways={} walkable_ways={} resolved_ways={} unresolved_ways={} referenced_nodes={} resolved_nodes={} paths={} footways={} tracks={}",
+        extract.extraction.scanned_ways,
+        extract.extraction.emitted_ways,
+        extract.geometry.resolved_ways,
+        extract.geometry.unresolved_ways,
+        extract.geometry.referenced_nodes,
+        extract.geometry.resolved_nodes,
+        extract.extraction.paths,
+        extract.extraction.footways,
+        extract.extraction.tracks
     ))
 }
 

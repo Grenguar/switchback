@@ -269,7 +269,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "switchback-cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde_json",
  "switchback-ingest",
@@ -280,32 +280,32 @@ dependencies = [
 
 [[package]]
 name = "switchback-ingest"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "switchback-trailpack",
 ]
 
 [[package]]
 name = "switchback-matcher"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "switchback-osm"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "osmpbfreader",
 ]
 
 [[package]]
 name = "switchback-route"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "switchback-trailpack"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde",
  "serde_json",

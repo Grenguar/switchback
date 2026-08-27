@@ -50,6 +50,8 @@ export const documentedStarts = {
 export type StartId = keyof typeof documentedStarts;
 export type PlannedSegment = { name: string; surface: string | null; sac_scale: string | null; waymarked: boolean; official_ref: string | null };
 export type PlannedRoute = { id: string; name: string; start: (typeof documentedStarts)[StartId]; distanceKm: number; durationHours: number; waymarkedPercent: number; coordinates: Array<[number, number]>; segments: PlannedSegment[]; edgeIds: string[]; source: string };
+/** A user-selected coordinate that must resolve to a nearby TrailPack node. */
+export type Waypoint = { latitude: number; longitude: number };
 export type PlannerProbe = { latitude: number; longitude: number; targetKm: number; preferWaymarked: boolean };
 export type PlannerDiagnostic = {
   snap: { status: "accepted" | "rejected"; nearest_node: number; distance_m: number; max_distance_m: number };
@@ -148,13 +150,40 @@ export class TrailPlanner {
       const diagnostic = this.probe({ latitude: start.latitude, longitude: start.longitude, targetKm, preferWaymarked });
       throw new Error(`${diagnostic.result.message} Rejected candidates: ${diagnostic.rejected.closure} closure, ${diagnostic.rejected.distance} distance, ${diagnostic.rejected.reuse} reuse.`);
     }
-    const loopEdges = winner.edges;
-    const waymarkedMetres = loopEdges.filter((edge) => edge.official !== null).reduce((sum, edge) => sum + edge.length_m, 0);
+    return this.toPlannedRoute(start, winner.edges);
+  }
+
+  /**
+   * Rebuilds a loop through a user waypoint using directed graph edges only.
+   * The return leg is forbidden from using any physical segment used outbound,
+   * so a successful edit cannot silently turn a loop into an out-and-back.
+   * This method has no mutable planner state: failures leave its input route
+   * and any caller-owned session unchanged.
+   */
+  replanViaWaypoint(route: PlannedRoute, waypoint: Waypoint, preferWaymarked = true): PlannedRoute {
+    if (!Number.isFinite(waypoint.latitude) || waypoint.latitude < -90 || waypoint.latitude > 90 || !Number.isFinite(waypoint.longitude) || waypoint.longitude < -180 || waypoint.longitude > 180) {
+      throw new Error("Waypoint must contain finite WGS84 latitude and longitude values.");
+    }
+    if (route.edgeIds.length === 0) throw new Error("Cannot edit an empty route.");
+    const edgeById = new Map(this.edges.map((edge) => [edge.id, edge]));
+    const existingEdges = route.edgeIds.map((id) => edgeById.get(id));
+    if (existingEdges.some((edge) => edge === undefined)) throw new Error("The active route does not belong to this TrailPack graph.");
+    const startNode = existingEdges[0]!.from;
+    const snapped = this.nearestNode(waypoint.latitude, waypoint.longitude);
+    if (snapped.distanceMetres > MAX_SNAP_METRES) {
+      throw new Error(`Waypoint is ${Math.round(snapped.distanceMetres)} m from the nearest TrailPack node; the graph refuses to snap beyond ${MAX_SNAP_METRES} m.`);
+    }
+    if (snapped.node === startNode) throw new Error("Waypoint resolves to the route start; choose a distinct on-trail waypoint.");
+    const outward = this.findPath(startNode, snapped.node, new Set(), preferWaymarked);
+    if (!outward || outward.length === 0) throw new Error("No directed TrailPack path reaches that waypoint from the current route start.");
+    const returnEdges = this.findPath(snapped.node, startNode, new Set(outward.map((edge) => edge.physical_id)), preferWaymarked);
+    if (!returnEdges || returnEdges.length === 0) throw new Error("No directed non-retracing return path exists from that waypoint.");
+    const loopEdges = outward.concat(returnEdges);
     const distanceMetres = loopEdges.reduce((sum, edge) => sum + edge.length_m, 0);
-    const coordinates: Array<[number, number]> = [this.nodes[loopEdges[0]!.from]!];
-    for (const edge of loopEdges) coordinates.push(this.nodes[edge.to]!);
-    const segments = loopEdges.slice(0, 5).map((edge) => ({ name: edge.physical_id, surface: edge.terrain.surface, sac_scale: edge.terrain.sac_scale, waymarked: edge.official !== null, official_ref: edge.official?.ref_code ?? null }));
-    return { id: `loop-${start.id}-${loopEdges.map((edge) => edge.id).join(".")}`, name: `${start.name} TrailPack loop`, start, distanceKm: Math.round(distanceMetres / 100) / 10, durationHours: Math.round((distanceMetres / 4_000) * 10) / 10, waymarkedPercent: Math.round((waymarkedMetres / distanceMetres) * 100), coordinates, segments, edgeIds: loopEdges.map((edge) => edge.id), source: `${this.artifact.manifest.region_name} TrailPack v1` };
+    if (distanceMetres < MIN_LOOP_METRES || distanceMetres > MAX_LOOP_METRES) {
+      throw new Error(`Waypoint loop is ${Math.round(distanceMetres / 100) / 10} km; TrailPack accepts loops between ${MIN_LOOP_METRES / 1000} and ${MAX_LOOP_METRES / 1000} km.`);
+    }
+    return this.toPlannedRoute(route.start, loopEdges, "via waypoint");
   }
 
   /**
@@ -238,6 +267,26 @@ export class TrailPlanner {
     }
     if (!Number.isFinite(nearestDistance)) throw new Error("TrailPack has no routable nodes.");
     return { node: nearest, distanceMetres: nearestDistance };
+  }
+
+  private toPlannedRoute(start: (typeof documentedStarts)[StartId], loopEdges: IndexedEdge[], suffix = ""): PlannedRoute {
+    const waymarkedMetres = loopEdges.filter((edge) => edge.official !== null).reduce((sum, edge) => sum + edge.length_m, 0);
+    const distanceMetres = loopEdges.reduce((sum, edge) => sum + edge.length_m, 0);
+    const coordinates: Array<[number, number]> = [this.nodes[loopEdges[0]!.from]!];
+    for (const edge of loopEdges) coordinates.push(this.nodes[edge.to]!);
+    const segments = loopEdges.slice(0, 5).map((edge) => ({ name: edge.physical_id, surface: edge.terrain.surface, sac_scale: edge.terrain.sac_scale, waymarked: edge.official !== null, official_ref: edge.official?.ref_code ?? null }));
+    return {
+      id: `loop-${start.id}-${loopEdges.map((edge) => edge.id).join(".")}`,
+      name: `${start.name} TrailPack loop${suffix ? ` ${suffix}` : ""}`,
+      start,
+      distanceKm: Math.round(distanceMetres / 100) / 10,
+      durationHours: Math.round((distanceMetres / 4_000) * 10) / 10,
+      waymarkedPercent: Math.round((waymarkedMetres / distanceMetres) * 100),
+      coordinates,
+      segments,
+      edgeIds: loopEdges.map((edge) => edge.id),
+      source: `${this.artifact.manifest.region_name} TrailPack v1`,
+    };
   }
 
   private dijkstra(start: number, reverse: boolean, preferWaymarked: boolean): { distance: number[]; previous: Array<number | undefined> } {

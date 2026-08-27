@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, type PlannedRoute } from "../src/planner";
-import { setRouteRenderer, setTrailPlanner, toolContracts } from "../src/tools";
+import { setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -27,8 +27,15 @@ test("plan_route renders a directed TrailPack loop before returning", async () =
   setTrailPlanner(new TrailPlanner(artifact)); let rendered: PlannedRoute | undefined; setRouteRenderer((route) => { rendered = route; });
   const tool = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(tool);
   await assert.rejects(() => tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true, max_ascent_m: 900 }), /no elevation/);
-  const result = await tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true }) as { rendered: boolean; distance_km: number };
-  assert.equal(result.rendered, true); assert.equal(result.distance_km, 2.8); assert.ok(rendered); assert.ok(JSON.stringify(result).length <= 1_500);
+  const observed: string[] = [];
+  setToolInvocationObserver((name) => observed.push(name));
+  const result = await tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true }) as { rendered: boolean; distance_km: number; official_match_percent: number };
+  assert.equal(result.rendered, true); assert.equal(result.distance_km, 2.8); assert.equal(result.official_match_percent, 36); assert.equal("waymarked_percent" in result, false); assert.ok(rendered); assert.deepEqual(observed, ["plan_route"]); assert.ok(JSON.stringify(result).length <= 1_500);
+  const summary = toolContracts.find((candidate) => candidate.name === "get_route_summary"); assert.ok(summary);
+  const summaryResult = await summary.execute({}) as { notable_segments: Array<Record<string, unknown>> };
+  assert.equal("waymarked" in summaryResult.notable_segments[0]!, false);
+  assert.equal("official_match" in summaryResult.notable_segments[0]!, true);
+  setToolInvocationObserver(undefined);
 });
 
 test("planner probe reports snap, closure, distance, and reuse evidence without widening route acceptance", () => {
@@ -76,6 +83,10 @@ test("published Tarragona TrailPack produces the verified GR-65.5 access loop an
   const route = planner.plan("gr65_access", 7.2, true);
   console.log(`gr65_access selected loop: ${route.distanceKm} km; ${route.edgeIds.length} directed edges; ${route.waymarkedPercent}% official-match coverage.`);
   assert.ok(route.distanceKm >= 7 && route.distanceKm <= 7.5);
+  const waypoint = route.coordinates[Math.floor(route.coordinates.length / 2)]!;
+  const replanned = planner.replanViaWaypoint(route, { latitude: waypoint[0], longitude: waypoint[1] }, true);
+  assert.notEqual(replanned.id, route.id);
+  assert.ok(replanned.coordinates.some(([latitude, longitude]) => latitude === waypoint[0] && longitude === waypoint[1]));
   for (const start of ["ulldemolins", "prades", "albarca"] as const) {
     assert.throws(() => planner.plan(start, 7.2, true), /unavailable in TrailPack v1/);
   }

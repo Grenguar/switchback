@@ -2,6 +2,21 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.6] - 2026-08-27
+
+### Added
+
+- Q4 human-agent collaboration: a 44 px draggable route through-point with Arrow-key/Enter repositioning and Escape cancellation.
+- Directed, bounded, non-retracing TrailPack re-planning through the accepted waypoint; rejected edits leave the active route unchanged.
+- Session-scoped edit records with route revision, requested target, target error, before/after distance, and official-match deltas.
+- Visible audit logging for both on-page interactions and externally invoked WebMCP tool calls.
+
+### Changed
+
+- `describe_last_edit` now reports a real accepted manual edit rather than a placeholder.
+- Public tool outputs now use confidence-gated `official_match_*` fields instead of claiming a matched segment is waymarked.
+- Bumped the Rust workspace and web application versions from `0.1.5` to `0.1.6`.
+
 ## [0.1.5] - 2026-08-27
 
 ### Added

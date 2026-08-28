@@ -33,6 +33,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .map-grain { z-index: 2; pointer-events: none; opacity: .12; }
 .contours { position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .38; }
 .map-key { gap: 10px; }
+.map-key { padding: 7px 9px; background: rgba(244, 241, 219, .88); color: #173328; border-left: 2px solid #b64f39; }
+.map-attribution { position: absolute; z-index: 4; right: 22px; bottom: 48px; margin: 0; padding: 4px 6px; background: rgba(244, 241, 219, .9); color: #173328; font: .58rem 'DM Mono', monospace; }
+.map-attribution a { color: inherit; }
+@media (max-width: 760px) { .map-attribution { right: 14px; bottom: 43px; } }
 .network-swatch { display: inline-block; width: 19px; vertical-align: middle; margin-right: 5px; border-top: 1px solid #1b4330; }
 .gpx-export { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
 .gpx-export p { margin: 0 0 9px; font: .62rem/1.45 'DM Mono', monospace; }

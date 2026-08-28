@@ -24,6 +24,11 @@ const integer = (value: unknown, label: string): number => {
   if (!Number.isInteger(number)) throw new Error(`TrailPack ${label} must be an integer.`);
   return number;
 };
+const tileId = (value: unknown): string => {
+  const id = requiredString(value, "tile id");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id === "." || id === "..") throw new Error("TrailPack tile id is invalid.");
+  return id;
+};
 
 export function parseManifest(value: unknown): TrailPackManifest {
   const data = object(value, "manifest");
@@ -31,7 +36,9 @@ export function parseManifest(value: unknown): TrailPackManifest {
   if (!Array.isArray(data.bbox) || data.bbox.length !== 4) throw new Error("TrailPack bbox is invalid.");
   const bbox = data.bbox.map((coordinate) => finite(coordinate, "bbox")) as [number, number, number, number];
   if (!(bbox[0] < bbox[2] && bbox[1] < bbox[3])) throw new Error("TrailPack bbox is invalid.");
-  if (!Array.isArray(data.tiles) || data.tiles.length === 0 || !data.tiles.every((tile) => typeof tile === "string" && tile.trim().length > 0)) throw new Error("TrailPack tile index is invalid.");
+  if (!Array.isArray(data.tiles) || data.tiles.length === 0) throw new Error("TrailPack tile index is invalid.");
+  const tiles = data.tiles.map(tileId);
+  if (new Set(tiles).size !== tiles.length) throw new Error("TrailPack tile index is invalid.");
   const tileZoom = integer(data.tile_zoom, "tile zoom");
   if (tileZoom < 0 || tileZoom > 22) throw new Error("TrailPack tile zoom is invalid.");
   if (!Array.isArray(data.sources) || data.sources.length === 0) throw new Error("TrailPack provenance is missing.");
@@ -39,17 +46,11 @@ export function parseManifest(value: unknown): TrailPackManifest {
     const source = object(sourceValue, "source");
     return { id: requiredString(source.id, "source id"), name: requiredString(source.name, "source name"), licence: requiredString(source.licence, "source licence"), attribution: requiredString(source.attribution, "source attribution"), extract_date: requiredString(source.extract_date, "source extract date") };
   });
-  return { schema_version: 1, region_id: requiredString(data.region_id, "region id"), region_name: requiredString(data.region_name, "region name"), bbox, built_at: requiredString(data.built_at, "build timestamp"), tile_zoom: tileZoom, tiles: data.tiles as string[], sources };
+  return { schema_version: 1, region_id: requiredString(data.region_id, "region id"), region_name: requiredString(data.region_name, "region name"), bbox, built_at: requiredString(data.built_at, "build timestamp"), tile_zoom: tileZoom, tiles, sources };
 }
 
-function parseArtifact(value: unknown, expectedManifest: TrailPackManifest): TrailPackArtifact {
-  const data = object(value, "artifact");
-  const manifest = parseManifest(data.manifest);
-  if (manifest.region_id !== expectedManifest.region_id || manifest.built_at !== expectedManifest.built_at) throw new Error("TrailPack graph artifact does not match its manifest.");
-  const tiles = object(data.tiles, "tiles");
-  const parsedTiles: TrailPackArtifact["tiles"] = {};
-  for (const id of manifest.tiles) {
-    const tile = object(tiles[id], `tile ${id}`);
+export function parseTile(value: unknown, id: string): TrailPackArtifact["tiles"][string] {
+    const tile = object(value, `tile ${id}`);
     if (!Array.isArray(tile.nodes) || !Array.isArray(tile.edges)) throw new Error(`TrailPack tile ${id} is invalid.`);
     const nodes = tile.nodes.map((nodeValue, index) => {
       const node = object(nodeValue, `node ${index}`);
@@ -70,8 +71,16 @@ function parseArtifact(value: unknown, expectedManifest: TrailPackManifest): Tra
       if (!Array.isArray(edge.geometry) || !edge.geometry.every((point) => Array.isArray(point) && point.length === 2 && point.every(Number.isInteger))) throw new Error(`TrailPack edge ${index} geometry is invalid.`);
       return { id: requiredString(edge.id, `edge ${index} id`), physical_id: requiredString(edge.physical_id, `edge ${index} physical id`), from, to, length_m: integer(edge.length_m, `edge ${index} length`), ascent_m: nullableInteger(edge.ascent_m, `edge ${index} ascent`), descent_m: nullableInteger(edge.descent_m, `edge ${index} descent`), geometry: edge.geometry as Array<[number, number]>, terrain: { surface: terrainValue(terrainRaw.surface, "surface"), sac_scale: terrainValue(terrainRaw.sac_scale, "sac scale"), visibility: terrainValue(terrainRaw.visibility, "visibility"), width_hint: terrainValue(terrainRaw.width_hint, "width hint") }, official };
     });
-    parsedTiles[id] = { nodes, edges };
-  }
+    return { nodes, edges };
+}
+
+function parseArtifact(value: unknown, expectedManifest: TrailPackManifest): TrailPackArtifact {
+  const data = object(value, "artifact");
+  const manifest = parseManifest(data.manifest);
+  if (manifest.region_id !== expectedManifest.region_id || manifest.built_at !== expectedManifest.built_at) throw new Error("TrailPack graph artifact does not match its manifest.");
+  const tiles = object(data.tiles, "tiles");
+  const parsedTiles: TrailPackArtifact["tiles"] = {};
+  for (const id of manifest.tiles) parsedTiles[id] = parseTile(tiles[id], id);
   return { manifest, tiles: parsedTiles };
 }
 
@@ -89,6 +98,17 @@ export async function loadTrailPack(fetcher: typeof fetch = fetch): Promise<Trai
     const manifestResponse = await fetcher("/trailpack/manifest.json", { cache: "no-store" });
     if (!manifestResponse.ok) throw new Error("TrailPack manifest is not published for this deployment.");
     const manifest = parseManifest(await readJson(manifestResponse, 256 * 1024));
+    const tileResponses = await Promise.all(manifest.tiles.map(async (id) => {
+      const response = await fetcher(`/trailpack/tiles/${encodeURIComponent(id)}.json`, { cache: "no-store" });
+      if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) return undefined;
+      return [id, parseTile(await readJson(response, MAX_ARTIFACT_BYTES), id)] as const;
+    }));
+    if (tileResponses.every((tile) => tile !== undefined)) {
+      return { status: "ready", manifest, artifact: { manifest, tiles: Object.fromEntries(tileResponses) } };
+    }
+    // Existing one-file v1 packs remain readable while deployments migrate to
+    // independently cacheable tiles. Multi-tile packs never use this fallback.
+    if (manifest.tiles.length !== 1) throw new Error("TrailPack tile files are not published for this deployment.");
     const artifactResponse = await fetcher("/trailpack/tarragona-demo.json", { cache: "no-store" });
     if (!artifactResponse.ok || !(artifactResponse.headers.get("content-type") ?? "").includes("application/json")) throw new Error("TrailPack graph artifact is not published for this deployment.");
     return { status: "ready", manifest, artifact: parseArtifact(await readJson(artifactResponse, MAX_ARTIFACT_BYTES), manifest) };

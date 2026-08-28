@@ -27,6 +27,7 @@ const TEST_DEMO_BBOX: Bbox = [0.86, 41.23, 0.99, 41.34];
 const DEMO_TILE_ID: &str = "montsant-prades";
 const MAX_DEMO_DIRECTED_EDGES: usize = 80_000;
 const MAX_DEMO_NODES: usize = 40_000;
+const DEFAULT_TILE_ZOOM: u8 = 14;
 const OFFICIAL_MATCH_DISTANCE_M: f64 = 20.0;
 const OFFICIAL_MATCH_BEARING_DEGREES: f64 = 30.0;
 
@@ -39,7 +40,7 @@ fn main() -> ExitCode {
         }
         Err(error) => {
             eprintln!(
-                "error: {error}\nusage: switchback-cli <coverage|density|match-metrics|inspect-cnig|inspect-osm> <local-file>\n       switchback-cli build-demo --osm <tarragona.osm.pbf> --cnig <official.kml> [--cnig <official.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output <web/public/trailpack/tarragona-demo.json> --built-at <RFC3339> --extract-date <YYYY-MM-DD>"
+                "error: {error}\nusage: switchback-cli <coverage|density|match-metrics|inspect-cnig|inspect-osm> <local-file>\n       switchback-cli build-demo --osm <tarragona.osm.pbf> --cnig <official.kml> [--cnig <official.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output <web/public/trailpack/tarragona-demo.json> --built-at <RFC3339> --extract-date <YYYY-MM-DD>\n       switchback-cli build-tiles --osm <region.osm.pbf> --cnig <official.kml> [--cnig <official.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output-dir <web/public/trailpack> --built-at <RFC3339> --extract-date <YYYY-MM-DD> [--tile-zoom <0..22>]"
             );
             ExitCode::from(2)
         }
@@ -52,6 +53,12 @@ fn run(args: &[String]) -> Result<String, String> {
         .is_some_and(|argument| argument == "build-demo")
     {
         return build_demo(&BuildDemoArgs::parse(&args[1..])?);
+    }
+    if args
+        .first()
+        .is_some_and(|argument| argument == "build-tiles")
+    {
+        return build_tiles(&BuildTilesArgs::parse(&args[1..])?);
     }
     let [command, path] = args else {
         return Err("expected a command and local file path".into());
@@ -117,6 +124,55 @@ struct BuildDemoArgs {
     bbox: Bbox,
     built_at: String,
     extract_date: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct BuildTilesArgs {
+    build: BuildDemoArgs,
+    output_dir: PathBuf,
+    tile_zoom: u8,
+}
+
+impl BuildTilesArgs {
+    fn parse(args: &[String]) -> Result<Self, String> {
+        let mut rewritten = Vec::new();
+        let mut output_dir = None;
+        let mut tile_zoom = DEFAULT_TILE_ZOOM;
+        let mut index = 0;
+        while index < args.len() {
+            let flag = &args[index];
+            index += 1;
+            if flag == "--tile-zoom" {
+                let value = args.get(index).ok_or("--tile-zoom requires a value")?;
+                index += 1;
+                tile_zoom = value
+                    .parse()
+                    .map_err(|_| "--tile-zoom must be an integer")?;
+                if tile_zoom > 22 {
+                    return Err("--tile-zoom must be in 0..=22".into());
+                }
+            } else if flag == "--output-dir" {
+                let value = args.get(index).ok_or("--output-dir requires a value")?;
+                index += 1;
+                output_dir = Some(PathBuf::from(value));
+            } else {
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| format!("{flag} requires a value"))?;
+                index += 1;
+                rewritten.push(flag.clone());
+                rewritten.push(value.clone());
+            }
+        }
+        let output_dir = output_dir.ok_or("build-tiles requires --output-dir")?;
+        rewritten.push("--output".into());
+        rewritten.push(output_dir.join("legacy.json").display().to_string());
+        Ok(Self {
+            build: BuildDemoArgs::parse(&rewritten)?,
+            output_dir,
+            tile_zoom,
+        })
+    }
 }
 
 impl BuildDemoArgs {
@@ -269,6 +325,7 @@ fn build_demo(args: &BuildDemoArgs) -> Result<String, String> {
         args.bbox,
         &args.built_at,
         &args.extract_date,
+        true,
     )?;
     let artifact_json = artifact
         .to_json_bytes()
@@ -325,12 +382,142 @@ fn manifest_path(artifact_path: &Path) -> Result<PathBuf, String> {
     Ok(parent.join("manifest.json"))
 }
 
+fn build_tiles(args: &BuildTilesArgs) -> Result<String, String> {
+    let pbf = fs::File::open(&args.build.osm_path).map_err(|error| {
+        format!(
+            "could not open OSM PBF `{}`: {error}",
+            args.build.osm_path.display()
+        )
+    })?;
+    let geometry = read_walkable_geometry(pbf).map_err(|error| error.to_string())?;
+    let mut official_traces = Vec::new();
+    for path in &args.build.cnig_paths {
+        official_traces.extend(
+            CnigFedmeSource::from_path(path)
+                .load(args.build.bbox)
+                .map_err(|error| {
+                    format!(
+                        "could not load CNIG/FEDME KML `{}` inside the selected bbox: {error}",
+                        path.display()
+                    )
+                })?,
+        );
+    }
+    let (single_tile, q8) = build_artifact(
+        &geometry,
+        &official_traces,
+        args.build.bbox,
+        &args.build.built_at,
+        &args.build.extract_date,
+        false,
+    )?;
+    let artifact = split_into_tiles(single_tile, args.tile_zoom)?;
+    fs::create_dir_all(args.output_dir.join("tiles"))
+        .map_err(|error| format!("could not create tile output directory: {error}"))?;
+    fs::write(
+        args.output_dir.join("manifest.json"),
+        serde_json::to_vec_pretty(&artifact.manifest)
+            .map_err(|error| format!("could not encode manifest: {error}"))?,
+    )
+    .map_err(|error| format!("could not write manifest: {error}"))?;
+    for (id, tile) in &artifact.tiles {
+        fs::write(
+            args.output_dir.join("tiles").join(format!("{id}.json")),
+            serde_json::to_vec(tile)
+                .map_err(|error| format!("could not encode tile {id}: {error}"))?,
+        )
+        .map_err(|error| format!("could not write tile {id}: {error}"))?;
+    }
+    let edge_count: usize = artifact.tiles.values().map(|tile| tile.edges.len()).sum();
+    Ok(format!(
+        "build-tiles output_dir={} tiles={} edges={} official_traces={} q8_qualified_fraction={:.3}",
+        args.output_dir.display(),
+        artifact.tiles.len(),
+        edge_count,
+        official_traces.len(),
+        q8.qualified_fraction()
+    ))
+}
+
+fn split_into_tiles(source: TrailPackArtifact, zoom: u8) -> Result<TrailPackArtifact, String> {
+    let source_tile = source
+        .tiles
+        .get(DEMO_TILE_ID)
+        .ok_or("internal error: missing source tile")?;
+    let mut tiles = BTreeMap::<String, (Tile, BTreeMap<(i32, i32), u32>)>::new();
+    for edge in &source_tile.edges {
+        let from = source_tile
+            .nodes
+            .get(edge.from as usize)
+            .ok_or("internal error: source edge has invalid origin")?;
+        let id = slippy_tile_id(*from, zoom);
+        let (tile, local_nodes) = tiles.entry(id).or_insert_with(|| {
+            (
+                Tile {
+                    nodes: Vec::new(),
+                    edges: Vec::new(),
+                },
+                BTreeMap::new(),
+            )
+        });
+        let mut local_edge = edge.clone();
+        for (source_index, target) in [
+            (edge.from, &mut local_edge.from),
+            (edge.to, &mut local_edge.to),
+        ] {
+            let node = source_tile
+                .nodes
+                .get(source_index as usize)
+                .ok_or("internal error: source edge has invalid node")?;
+            let key = (node.lat_e7, node.lon_e7);
+            let index = if let Some(index) = local_nodes.get(&key) {
+                *index
+            } else {
+                let index =
+                    u32::try_from(tile.nodes.len()).map_err(|_| "tile node count exceeds u32")?;
+                tile.nodes.push(*node);
+                local_nodes.insert(key, index);
+                index
+            };
+            *target = index;
+        }
+        tile.edges.push(local_edge);
+    }
+    let mut manifest = source.manifest;
+    manifest.tile_zoom = zoom;
+    manifest.tiles = tiles.keys().cloned().collect();
+    let tiles = tiles
+        .into_iter()
+        .map(|(id, (tile, _))| (id, tile))
+        .collect();
+    TrailPackArtifact::new(manifest, tiles).map_err(|error| error.to_string())
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn slippy_tile_id(node: Node, zoom: u8) -> String {
+    let scale = f64::from(1_u32 << zoom);
+    let last_index = scale - 1.0;
+    let longitude = f64::from(node.lon_e7) / 1e7;
+    let latitude = (f64::from(node.lat_e7) / 1e7)
+        .clamp(-85.051_128_78, 85.051_128_78)
+        .to_radians();
+    let x = (((longitude + 180.0) / 360.0) * scale)
+        .floor()
+        .clamp(0.0, last_index) as u32;
+    let y = ((1.0 - (latitude.tan() + latitude.cos().recip()).ln() / std::f64::consts::PI) / 2.0
+        * scale)
+        .floor()
+        .clamp(0.0, last_index) as u32;
+    format!("z{zoom}-x{x}-y{y}")
+}
+
 fn build_artifact(
     input: &WalkableGeometryExtract,
     official_traces: &[OfficialTrace],
     bbox: Bbox,
     built_at: &str,
     extract_date: &str,
+    enforce_demo_limits: bool,
 ) -> Result<(TrailPackArtifact, Q8Evidence), String> {
     let candidates = input
         .ways
@@ -345,7 +532,7 @@ fn build_artifact(
         .iter()
         .map(|segment| direction_count(&segment.tags))
         .sum::<usize>();
-    if directed_edge_count > MAX_DEMO_DIRECTED_EDGES {
+    if enforce_demo_limits && directed_edge_count > MAX_DEMO_DIRECTED_EDGES {
         return Err(format!(
             "demo bbox selected {directed_edge_count} directed edges, exceeding the browser-safe limit of {MAX_DEMO_DIRECTED_EDGES}"
         ));
@@ -356,7 +543,7 @@ fn build_artifact(
         points.insert(segment.from_point);
         points.insert(segment.to_point);
     }
-    if points.len() > MAX_DEMO_NODES {
+    if enforce_demo_limits && points.len() > MAX_DEMO_NODES {
         return Err(format!(
             "demo bbox selected {} nodes, exceeding the browser-safe limit of {MAX_DEMO_NODES}",
             points.len()
@@ -420,11 +607,10 @@ fn build_artifact(
             },
         ],
     };
-    let artifact = TrailPackArtifact::new(
+    let artifact = TrailPackArtifact {
         manifest,
-        BTreeMap::from([(DEMO_TILE_ID.into(), Tile { nodes, edges })]),
-    )
-    .map_err(|error| error.to_string())?;
+        tiles: BTreeMap::from([(DEMO_TILE_ID.into(), Tile { nodes, edges })]),
+    };
     Ok((artifact, q8))
 }
 
@@ -949,6 +1135,7 @@ mod tests {
             TEST_DEMO_BBOX,
             "2026-08-27T00:00:00Z",
             "2026-08-27",
+            true,
         )
         .unwrap();
         assert_eq!(artifact.manifest.tiles, [DEMO_TILE_ID]);
@@ -1003,6 +1190,7 @@ mod tests {
             TEST_DEMO_BBOX,
             "2026-08-27T00:00:00Z",
             "2026-08-27",
+            true,
         )
         .unwrap();
         assert_eq!(

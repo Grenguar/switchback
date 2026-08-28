@@ -91,15 +91,23 @@ export class TrailPlanner {
   private readonly incoming: number[][] = [];
 
   constructor(private readonly artifact: TrailPackArtifact) {
+    const globalNodes = new Map<string, number>();
     for (const tileId of artifact.manifest.tiles) {
       const tile = artifact.tiles[tileId]!;
-      const offset = this.nodes.length;
-      for (const node of tile.nodes) { this.nodes.push([node.lat_e7 / 1e7, node.lon_e7 / 1e7]); this.outgoing.push([]); this.incoming.push([]); }
+      const localToGlobal: number[] = [];
+      for (const node of tile.nodes) {
+        const key = `${node.lat_e7},${node.lon_e7}`;
+        let index = globalNodes.get(key);
+        if (index === undefined) { index = this.nodes.length; globalNodes.set(key, index); this.nodes.push([node.lat_e7 / 1e7, node.lon_e7 / 1e7]); this.outgoing.push([]); this.incoming.push([]); }
+        localToGlobal.push(index);
+      }
       for (const edge of tile.edges) {
         const index = this.edges.length;
-        this.edges.push({ ...edge, from: edge.from + offset, to: edge.to + offset });
-        this.outgoing[edge.from + offset]!.push(index);
-        this.incoming[edge.to + offset]!.push(index);
+        const from = localToGlobal[edge.from]!;
+        const to = localToGlobal[edge.to]!;
+        this.edges.push({ ...edge, from, to });
+        this.outgoing[from]!.push(index);
+        this.incoming[to]!.push(index);
       }
     }
   }

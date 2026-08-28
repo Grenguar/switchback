@@ -3,12 +3,17 @@ import type { TrailPackArtifact } from "./trailpack";
 
 type Point = { latitude: number; longitude: number };
 type Segment = { from: Point; to: Point; official: boolean };
+type RasterTile = { x: number; y: number; image: HTMLImageElement };
 
-/** Draws the static TrailPack graph itself; no map tiles or routing service. */
+const TILE_ZOOM = 13;
+const TILE_SIZE = 256;
+
+/** Draws the locally routed TrailPack graph over a visible OSM reference map. */
 export class TrailMap {
   private artifact: TrailPackArtifact | undefined;
   private route: PlannedRoute | undefined;
   private network: Segment[] = [];
+  private rasterTiles: RasterTile[] = [];
   private observer: ResizeObserver;
 
   constructor(private readonly canvas: HTMLCanvasElement, private readonly fallback: HTMLElement) {
@@ -23,7 +28,6 @@ export class TrailMap {
     for (const tileId of artifact.manifest.tiles) {
       const tile = artifact.tiles[tileId]!;
       for (const edge of tile.edges) {
-        // Directed edges come in pairs; one physical segment keeps the map legible.
         if (physicalIds.has(edge.physical_id)) continue;
         physicalIds.add(edge.physical_id);
         const from = tile.nodes[edge.from]!;
@@ -32,15 +36,37 @@ export class TrailMap {
       }
     }
     this.network = segments;
-    this.fallback.textContent = `${segments.length.toLocaleString()} TrailPack trail segments are visible on this offline map. The selected route is overlaid in light ink.`;
+    this.rasterTiles = [];
+    this.loadRasterTiles();
+    this.fallback.textContent = `${segments.length.toLocaleString()} TrailPack segments are overlaid on an OpenStreetMap reference map. Routing remains local to the loaded TrailPack graph.`;
     this.draw();
   }
 
   setRoute(route: PlannedRoute | undefined): void { this.route = route; this.draw(); }
 
+  private worldX(longitude: number): number { return ((longitude + 180) / 360) * TILE_SIZE * (2 ** TILE_ZOOM); }
+  private worldY(latitude: number): number {
+    const radians = Math.max(-85.05112878, Math.min(85.05112878, latitude)) * Math.PI / 180;
+    return (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * TILE_SIZE * (2 ** TILE_ZOOM);
+  }
+
   private project(point: Point, width: number, height: number): [number, number] {
     const [west, south, east, north] = this.artifact!.manifest.bbox;
-    return [((point.longitude - west) / (east - west)) * width, (1 - ((point.latitude - south) / (north - south))) * height];
+    return [((this.worldX(point.longitude) - this.worldX(west)) / (this.worldX(east) - this.worldX(west))) * width, ((this.worldY(point.latitude) - this.worldY(north)) / (this.worldY(south) - this.worldY(north))) * height];
+  }
+
+  private loadRasterTiles(): void {
+    const [west, south, east, north] = this.artifact!.manifest.bbox;
+    const minX = Math.floor(this.worldX(west) / TILE_SIZE); const maxX = Math.floor(this.worldX(east) / TILE_SIZE);
+    const minY = Math.floor(this.worldY(north) / TILE_SIZE); const maxY = Math.floor(this.worldY(south) / TILE_SIZE);
+    const limit = 2 ** TILE_ZOOM;
+    for (let y = Math.max(0, minY); y <= Math.min(limit - 1, maxY); y += 1) {
+      for (let x = Math.max(0, minX); x <= Math.min(limit - 1, maxX); x += 1) {
+        const image = new Image();
+        image.addEventListener("load", () => { this.rasterTiles.push({ x, y, image }); this.draw(); }, { once: true });
+        image.src = `https://tile.openstreetmap.org/${TILE_ZOOM}/${x}/${y}.png`;
+      }
+    }
   }
 
   private drawRoute(context: CanvasRenderingContext2D, points: Point[], width: number, height: number): void {
@@ -62,8 +88,17 @@ export class TrailMap {
     if (this.canvas.width !== width || this.canvas.height !== height) { this.canvas.width = width; this.canvas.height = height; }
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, rect.width, rect.height);
+    const [west, south, east, north] = this.artifact.manifest.bbox;
+    for (const tile of this.rasterTiles) {
+      const left = ((tile.x * TILE_SIZE - this.worldX(west)) / (this.worldX(east) - this.worldX(west))) * rect.width;
+      const top = ((tile.y * TILE_SIZE - this.worldY(north)) / (this.worldY(south) - this.worldY(north))) * rect.height;
+      const tileWidth = (TILE_SIZE / (this.worldX(east) - this.worldX(west))) * rect.width;
+      const tileHeight = (TILE_SIZE / (this.worldY(south) - this.worldY(north))) * rect.height;
+      context.drawImage(tile.image, left, top, tileWidth, tileHeight);
+    }
+    context.fillStyle = this.rasterTiles.length > 0 ? "rgba(15, 36, 31, .14)" : "#c4b98d";
+    context.fillRect(0, 0, rect.width, rect.height);
     context.lineCap = "round"; context.lineJoin = "round";
-    // Official matching is a different visual layer, never a claim that marks are current.
     for (const official of [false, true]) {
       context.beginPath();
       for (const segment of this.network) {
@@ -72,14 +107,14 @@ export class TrailMap {
         const [toX, toY] = this.project(segment.to, rect.width, rect.height);
         context.moveTo(fromX, fromY); context.lineTo(toX, toY);
       }
-      context.strokeStyle = official ? "rgba(204, 219, 152, .73)" : "rgba(27, 67, 48, .63)";
-      context.lineWidth = official ? 1.15 : .72;
+      context.strokeStyle = official ? "rgba(223, 240, 167, .95)" : "rgba(15, 63, 46, .86)";
+      context.lineWidth = official ? 1.5 : 1;
       context.stroke();
     }
     if (!this.route) return;
     const points = this.route.coordinates.map(([latitude, longitude]) => ({ latitude, longitude }));
-    context.strokeStyle = "rgba(20, 49, 38, .7)"; context.lineWidth = 7; this.drawRoute(context, points, rect.width, rect.height);
-    context.strokeStyle = "#f4f1db"; context.lineWidth = 4; this.drawRoute(context, points, rect.width, rect.height);
-    context.strokeStyle = "#b64f39"; context.lineWidth = 1.25; this.drawRoute(context, points, rect.width, rect.height);
+    context.strokeStyle = "rgba(12, 35, 26, .78)"; context.lineWidth = 8; this.drawRoute(context, points, rect.width, rect.height);
+    context.strokeStyle = "#f8f5df"; context.lineWidth = 4.5; this.drawRoute(context, points, rect.width, rect.height);
+    context.strokeStyle = "#b64f39"; context.lineWidth = 1.5; this.drawRoute(context, points, rect.width, rect.height);
   }
 }

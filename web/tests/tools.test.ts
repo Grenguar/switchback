@@ -88,10 +88,31 @@ test("TrailPack v1 manifest requires provenance and refuses unsupported schemas"
 });
 
 test("loadTrailPack validates a same-origin v1 graph before returning it", async () => {
-  const fetcher: typeof fetch = async (input) => new Response(JSON.stringify(String(input).endsWith("manifest.json") ? manifest : artifact), { headers: { "content-type": "application/json" } });
+  const fetcher: typeof fetch = async (input) => {
+    if (String(input).includes("/tiles/")) return new Response("not found", { status: 404 });
+    return new Response(JSON.stringify(String(input).endsWith("manifest.json") ? manifest : artifact), { headers: { "content-type": "application/json" } });
+  };
   const result = await loadTrailPack(fetcher);
   assert.equal(result.status, "ready");
   if (result.status === "ready") assert.equal(result.artifact.tiles.demo?.edges[0]?.id, "a+");
+});
+
+test("loadTrailPack loads every static tile and the planner joins a shared boundary node", async () => {
+  const tiledManifest = { ...manifest, tiles: ["west", "east"] };
+  const west = { nodes: [artifact.tiles.demo.nodes[0], artifact.tiles.demo.nodes[1]], edges: [artifact.tiles.demo.edges[0]] };
+  const east = { nodes: [artifact.tiles.demo.nodes[1], artifact.tiles.demo.nodes[2], artifact.tiles.demo.nodes[0]], edges: [{ ...artifact.tiles.demo.edges[1], from: 0, to: 1 }, { ...artifact.tiles.demo.edges[2], from: 1, to: 2 }] };
+  const fetcher: typeof fetch = async (input) => {
+    const path = String(input);
+    const body = path.endsWith("manifest.json") ? tiledManifest : path.endsWith("west.json") ? west : east;
+    return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+  };
+  const result = await loadTrailPack(fetcher);
+  assert.equal(result.status, "ready");
+  if (result.status === "ready") {
+    const planner = new TrailPlanner(result.artifact);
+    const diagnostic = planner.probe({ latitude: 41.3081880617615, longitude: 0.967097645100853, targetKm: 3, preferWaymarked: true });
+    assert.equal(diagnostic.result.status, "loop_available");
+  }
 });
 
 test("published Tarragona TrailPack produces the verified GR-65.5 access loop and keeps town starts unavailable", async () => {
@@ -99,7 +120,10 @@ test("published Tarragona TrailPack produces the verified GR-65.5 access loop an
     readFile(new URL("../public/trailpack/manifest.json", import.meta.url), "utf8"),
     readFile(new URL("../public/trailpack/tarragona-demo.json", import.meta.url), "utf8"),
   ]);
-  const fetcher: typeof fetch = async (input) => new Response(String(input).endsWith("manifest.json") ? publishedManifest : publishedArtifact, { headers: { "content-type": "application/json" } });
+  const fetcher: typeof fetch = async (input) => {
+    if (String(input).includes("/tiles/")) return new Response("not found", { status: 404 });
+    return new Response(String(input).endsWith("manifest.json") ? publishedManifest : publishedArtifact, { headers: { "content-type": "application/json" } });
+  };
   const result = await loadTrailPack(fetcher);
   if (result.status !== "ready") throw new Error(result.status === "unavailable" ? result.message : "TrailPack did not finish loading.");
   const planner = new TrailPlanner(result.artifact);

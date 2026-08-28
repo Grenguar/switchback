@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, type PlannedRoute } from "../src/planner";
-import { setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts } from "../src/tools";
+import { setGpxRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -39,11 +39,15 @@ test("avoid_segment replans without the physical segment and GPX remains bounded
   const afterFailedAvoid = await summary.execute({}) as { notable_segments: Array<{ name: string }> };
   assert.deepEqual(afterFailedAvoid.notable_segments, after.notable_segments);
 
+  let renderedGpx: PreparedGpx | undefined;
+  setGpxRenderer((prepared) => { renderedGpx = prepared; });
   const gpx = toolContracts.find((candidate) => candidate.name === "prepare_gpx"); assert.ok(gpx);
-  const prepared = await gpx.execute({}) as { gpx_1_1: string; exported_points: number; original_route_points: number };
-  assert.match(prepared.gpx_1_1, /<gpx version="1.1"/); assert.match(prepared.gpx_1_1, /Simplified TrailPack route/);
+  const prepared = await gpx.execute({}) as { download_ready: boolean; transition_waypoints: Array<{ name: string }>; exported_points: number; original_route_points: number };
+  assert.ok(renderedGpx); assert.match(renderedGpx.content, /<gpx version="1.1"/); assert.match(renderedGpx.content, /<wpt /);
+  assert.equal(renderedGpx.transitions.length, 5); assert.equal(prepared.download_ready, true); assert.equal(prepared.transition_waypoints.length, 5);
   assert.ok(prepared.exported_points <= 12); assert.ok(prepared.original_route_points >= prepared.exported_points);
   assert.ok(JSON.stringify(prepared).length <= 1_500);
+  setGpxRenderer(undefined);
 });
 
 test("plan_route renders a directed TrailPack loop before returning", async () => {

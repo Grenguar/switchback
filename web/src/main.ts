@@ -1,5 +1,5 @@
 import "./style.css";
-import { commitWaypointEdit, documentedStarts, getActiveRoute, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts } from "./tools";
+import { commitWaypointEdit, documentedStarts, getActiveRoute, setGpxRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
 import { TrailPlanner, type PlannedRoute } from "./planner";
 import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { TrailMap } from "./trail-map";
@@ -20,7 +20,7 @@ app.innerHTML = `
         <form id="plan-form"><label for="start">Route start<select id="start" name="start">${Object.values(documentedStarts).map((start) => `<option value="${start.id}"${start.availability === "unavailable" ? " disabled" : " selected"}>${start.name}${start.availability === "unavailable" ? " — unavailable in v1" : ""}</option>`).join("")}</select></label><p class="field-hint" id="start-hint">GR-65.5 trail access is a verified on-trail coordinate, not a town or trailhead. Town starts remain visible until their access connectors are vetted.</p><label for="distance">Target distance <span class="field-value"><output id="distance-value">7.2</output> km</span><input id="distance" name="distance" type="range" min="2" max="30" step="0.1" value="7.2" /></label><fieldset><legend>Route character</legend><div class="choices"><label><input type="radio" name="character" value="waymarked" checked /> Prefer official-match evidence</label><label><input type="radio" name="character" value="neutral" /> Neutral</label></div></fieldset><p class="field-hint">Official matching is evidence, not a waymarking confirmation. Elevation and grade constraints are not sent: this TrailPack has no elevation values and incomplete grade tags.</p><button class="plan-button" type="submit">Generate data-backed loop <span>↗</span></button></form>
         <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
-    <section class="map-panel" id="map-panel" aria-label="Offline TrailPack map and route preview"><canvas class="trail-map" id="trail-map" aria-hidden="true"></canvas><p class="map-description" id="map-description" role="status">Loading the offline TrailPack map.</p><div class="map-grain"></div><div class="contours" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><button class="waypoint-handle" id="waypoint-handle" type="button" disabled aria-describedby="waypoint-help waypoint-update" aria-label="Route through-point. Plan a route before moving it."><span aria-hidden="true"></span></button><p class="waypoint-help" id="waypoint-help">Drag the through-point to request a graph replan. Keyboard: use arrow keys to position it, then Enter to apply; Escape cancels.</p><p class="waypoint-update" id="waypoint-update" role="status" aria-live="polite">Plan a route to enable the through-point.</p><span class="place place-one">Cornudella</span><span class="place place-two">Montsant</span><span class="place place-three">Siurana</span><div class="map-key"><span><i class="network-swatch"></i>TrailPack network</span><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Waiting for graph</p><h2 id="route-name">Use the verified GR-65.5 access</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">A loop is rendered only after the directed TrailPack graph has found one.</p></article></section>
+    <section class="map-panel" id="map-panel" aria-label="Offline TrailPack map and route preview"><canvas class="trail-map" id="trail-map" aria-hidden="true"></canvas><p class="map-description" id="map-description" role="status">Loading the offline TrailPack map.</p><div class="map-grain"></div><div class="contours" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><button class="waypoint-handle" id="waypoint-handle" type="button" disabled aria-describedby="waypoint-help waypoint-update" aria-label="Route through-point. Plan a route before moving it."><span aria-hidden="true"></span></button><p class="waypoint-help" id="waypoint-help">Drag the through-point to request a graph replan. Keyboard: use arrow keys to position it, then Enter to apply; Escape cancels.</p><p class="waypoint-update" id="waypoint-update" role="status" aria-live="polite">Plan a route to enable the through-point.</p><span class="place place-one">Cornudella</span><span class="place place-two">Montsant</span><span class="place place-three">Siurana</span><div class="map-key"><span><i class="network-swatch"></i>TrailPack network</span><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Waiting for graph</p><h2 id="route-name">Use the verified GR-65.5 access</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">A loop is rendered only after the directed TrailPack graph has found one.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
     </section>
     <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Six small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>0${index + 1}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
@@ -30,6 +30,27 @@ const log = document.querySelector<HTMLOListElement>("#log");
 const trailMapCanvas = document.querySelector<HTMLCanvasElement>("#trail-map");
 const mapDescription = document.querySelector<HTMLElement>("#map-description");
 const trailMap = trailMapCanvas && mapDescription ? new TrailMap(trailMapCanvas, mapDescription) : undefined;
+let preparedGpxUrl: string | undefined;
+const clearPreparedGpx = (): void => {
+  if (preparedGpxUrl) URL.revokeObjectURL(preparedGpxUrl);
+  preparedGpxUrl = undefined;
+  const exportPanel = document.querySelector<HTMLElement>("#gpx-export");
+  const download = document.querySelector<HTMLAnchorElement>("#gpx-download");
+  if (exportPanel) exportPanel.hidden = true;
+  if (download) download.removeAttribute("href");
+};
+const renderPreparedGpx = (prepared: PreparedGpx): void => {
+  clearPreparedGpx();
+  preparedGpxUrl = URL.createObjectURL(new Blob([prepared.content], { type: "application/gpx+xml" }));
+  const exportPanel = document.querySelector<HTMLElement>("#gpx-export");
+  const status = document.querySelector<HTMLElement>("#gpx-status");
+  const download = document.querySelector<HTMLAnchorElement>("#gpx-download");
+  if (status) status.textContent = `GPX ready: ${prepared.transitions.length} named transitions. Download requires your click.`;
+  if (download) { download.href = preparedGpxUrl; download.download = prepared.filename; }
+  if (exportPanel) exportPanel.hidden = false;
+};
+setGpxRenderer(renderPreparedGpx);
+window.addEventListener("pagehide", clearPreparedGpx);
 const bridgeCopy: Record<BridgeStatus, { label: string; next: string }> = {
   unavailable: { label: "Browser demo mode", next: "In ChatGPT, start a fresh GPT-5.6 Sol or Terra chat, have it open this URL in its browser, then reload this page or press Check model context. A normal browser tab cannot expose agent tools." },
   registered: { label: "WebMCP connected", next: "Tools are registered on this page. Ask your agent to discover the site tools and call plan_route." },
@@ -62,6 +83,7 @@ const addLog = (name: string, input: unknown, result: unknown, error?: unknown):
 setToolInvocationObserver((name, input, result, error) => addLog(name, input, result, error));
 
 function renderRoute(route: PlannedRoute): void {
+  clearPreparedGpx();
   const state = document.querySelector<HTMLElement>("#route-state");
   const name = document.querySelector<HTMLElement>("#route-name"); const distance = document.querySelector<HTMLElement>("#route-distance"); const duration = document.querySelector<HTMLElement>("#route-duration"); const kicker = document.querySelector<HTMLElement>("#route-kicker"); const note = document.querySelector<HTMLElement>("#route-note");
   if (state) state.textContent = "Directed TrailPack loop"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Graph-planned loop"; if (note) note.textContent = `${route.waymarkedPercent}% official-match coverage. Elevation unknown; verify current local conditions.`;

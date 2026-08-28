@@ -2,6 +2,19 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.9] - 2026-08-28
+
+### Added
+
+- A visible, user-gesture-only `Download GPX` control that appears only after `prepare_gpx` finishes successfully.
+- Five named TrailPack transition waypoints in each prepared GPX 1.1 file, alongside its bounded track and manifest-derived attribution.
+
+### Changed
+
+- `prepare_gpx` now returns a compact readiness summary to the agent rather than embedding XML in its response budget; it reports missing elevation honestly and confirms that no download has started.
+- Replanning clears a previously prepared GPX so a user cannot download a stale route.
+- Bumped the Rust workspace and web application versions from `0.1.8` to `0.1.9`.
+
 ## [0.1.8] - 2026-08-28
 
 ### Added

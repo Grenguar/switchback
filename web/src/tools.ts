@@ -4,6 +4,8 @@ import { RouteSession, type WaypointEdit } from "./route-session";
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
 export interface ToolContract { name: "plan_route" | "get_route_summary" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
 export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined) => void;
+export type PreparedGpx = Readonly<{ filename: string; content: string; exportedPoints: number; originalPoints: number; transitions: ReadonlyArray<Readonly<{ name: string; segmentName: string; latitude: number; longitude: number }>> }>;
+export type GpxRenderer = (prepared: PreparedGpx) => void | Promise<void>;
 
 const OUTPUT_LIMIT = 1_500;
 const untrusted = { readOnlyHint: false, untrustedContentHint: true };
@@ -13,11 +15,14 @@ let planner: TrailPlanner | undefined;
 let activeRoute: PlannedRoute | undefined;
 let routeSession: RouteSession | undefined;
 let renderRoute: ((route: PlannedRoute) => void | Promise<void>) | undefined;
+let renderGpx: GpxRenderer | undefined;
 let invocationObserver: ToolInvocationObserver | undefined;
 
 export function setTrailPackProvenance(dataset: string, sources: string[]): void { provenance = { dataset, sources: [...sources] }; }
 export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; }
 export function setRouteRenderer(renderer: (route: PlannedRoute) => void | Promise<void>): void { renderRoute = renderer; }
+/** Receives a prepared GPX before the tool confirms completion to an agent. */
+export function setGpxRenderer(renderer: GpxRenderer | undefined): void { renderGpx = renderer; }
 /** Receives every UI or browser-agent tool call after it settles, without changing its result. */
 export function setToolInvocationObserver(observer: ToolInvocationObserver | undefined): void { invocationObserver = observer; }
 export function getActiveRoute(): PlannedRoute | undefined { return activeRoute; }
@@ -52,11 +57,20 @@ const boundedCoordinates = (coordinates: PlannedRoute["coordinates"], maximum = 
   if (coordinates.length <= maximum) return coordinates;
   return Array.from({ length: maximum }, (_, index) => coordinates[Math.round(index * (coordinates.length - 1) / (maximum - 1))]!);
 };
-const gpxFor = (route: PlannedRoute): { filename: string; content: string; exportedPoints: number } => {
+const transitionWaypointsFor = (route: PlannedRoute): PreparedGpx["transitions"] => {
+  const count = 5;
+  return Array.from({ length: count }, (_, index) => {
+    const point = route.coordinates[Math.round(index * (route.coordinates.length - 1) / (count - 1))] ?? route.coordinates[0]!;
+    const segment = route.segments[Math.min(route.segments.length - 1, Math.floor(index * route.segments.length / count))] ?? { name: "TrailPack route" };
+    return Object.freeze({ name: `Transition ${String(index + 1).padStart(2, "0")} - ${segment.name}`, segmentName: segment.name, latitude: point[0], longitude: point[1] });
+  });
+};
+const gpxFor = (route: PlannedRoute): PreparedGpx => {
   const points = boundedCoordinates(route.coordinates);
+  const transitions = transitionWaypointsFor(route);
   const attribution = provenance.sources.join("; ");
-  const content = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Switchback TrailPack" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${xml(route.name)}</name><desc>${xml(`Simplified TrailPack route. ${route.source}. ${attribution}`)}</desc></metadata><trk><name>${xml(route.name)}</name><trkseg>${points.map(([latitude, longitude]) => `<trkpt lat="${latitude.toFixed(6)}" lon="${longitude.toFixed(6)}"/>`).join("")}</trkseg></trk></gpx>`;
-  return { filename: "switchback-trailpack-route.gpx", content, exportedPoints: points.length };
+  const content = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Switchback TrailPack" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${xml(route.name)}</name><desc>${xml(`Simplified TrailPack route. Elevation values are unavailable in this TrailPack. ${route.source}. ${attribution}`)}</desc></metadata>${transitions.map((point) => `<wpt lat="${point.latitude.toFixed(6)}" lon="${point.longitude.toFixed(6)}"><name>${xml(point.name)}</name><desc>${xml(`TrailPack transition on ${point.segmentName}`)}</desc></wpt>`).join("")}<trk><name>${xml(route.name)}</name><trkseg>${points.map(([latitude, longitude]) => `<trkpt lat="${latitude.toFixed(6)}" lon="${longitude.toFixed(6)}"/>`).join("")}</trkseg></trk></gpx>`;
+  return Object.freeze({ filename: "switchback-trailpack-route.gpx", content, exportedPoints: points.length, originalPoints: route.coordinates.length, transitions });
 };
 
 const rawToolContracts: ToolContract[] = [
@@ -109,19 +123,24 @@ const rawToolContracts: ToolContract[] = [
     },
   },
   {
-    name: "prepare_gpx", description: "Prepare a bounded GPX 1.1 representation of the active route with TrailPack provenance. It does not download or share a file; ask the user to save the returned content through a normal browser gesture.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    name: "prepare_gpx", description: "Prepare a bounded GPX 1.1 route with five named TrailPack transitions and reveal a user-gesture download control. It never starts a download or shares a file itself.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => {
       only(object(input), []);
       const route = current();
       const gpx = gpxFor(route);
+      // Create the user-gesture download control before claiming readiness.
+      await renderGpx?.(gpx);
       return abortable(signal, {
         filename: gpx.filename,
         mime_type: "application/gpx+xml",
-        gpx_1_1: gpx.content,
-        original_route_points: route.coordinates.length,
+        distance_km: route.distanceKm,
+        transition_waypoints: gpx.transitions.map((point) => ({ name: point.name, segment_name: point.segmentName })),
+        download_ready: renderGpx !== undefined,
+        elevation_values: "unavailable in this TrailPack",
+        original_route_points: gpx.originalPoints,
         exported_points: gpx.exportedPoints,
-        simplification: "Bounded 12-point GPX representation; inspect it before using it for navigation.",
-        next_step: "Show this GPX to the user and let them save or import it using their own browser or device gesture; no download was started.",
+        simplification: "Bounded 12-point track representation; inspect it before using it for navigation.",
+        next_step: "Tell the user that Switchback has revealed the Download GPX control. They must click it themselves to save or import the file; no download was started.",
       });
     },
   },

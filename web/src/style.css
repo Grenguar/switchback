@@ -34,4 +34,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .contours { position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .38; }
 .map-key { gap: 10px; }
 .network-swatch { display: inline-block; width: 19px; vertical-align: middle; margin-right: 5px; border-top: 1px solid #1b4330; }
+.gpx-export { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
+.gpx-export p { margin: 0 0 9px; font: .62rem/1.45 'DM Mono', monospace; }
+.gpx-export a { display: inline-flex; align-items: center; min-height: 44px; padding: 9px 11px; color: #edf0e5; background: #173328; font: 600 .65rem 'DM Mono', monospace; text-decoration: none; text-transform: uppercase; letter-spacing: .07em; }
+.gpx-export a:hover { background: #315c48; }
+.gpx-export a:focus-visible { outline-color: #173328; }
 @media (max-width: 760px) { .masthead { height: auto; min-height: 70px; gap: 12px; } }

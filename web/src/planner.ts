@@ -14,6 +14,14 @@ export type StartDefinition = {
 // GR-65.5 trace that lands on the v1 graph. The town labels remain visible so
 // the MVP does not imply they are usable starts before access links are vetted.
 export const documentedStarts = {
+  gr6_horta_access: {
+    id: "gr6_horta_access",
+    name: "GR-6 Horta trail access",
+    latitude: 41.4394290562267,
+    longitude: 2.14767392660807,
+    availability: "available",
+    description: "Verified on-trail access coordinate from the CNIG/FEDME GR-6 Horta–Sant Cugat source trace; not a town or a road-side proxy.",
+  },
   gr65_access: {
     id: "gr65_access",
     name: "GR-65.5 trail access",

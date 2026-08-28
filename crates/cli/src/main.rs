@@ -131,6 +131,10 @@ struct BuildTilesArgs {
     build: BuildDemoArgs,
     output_dir: PathBuf,
     tile_zoom: u8,
+    region_id: String,
+    region_name: String,
+    osm_source_id: String,
+    osm_source_name: String,
 }
 
 impl BuildTilesArgs {
@@ -138,6 +142,10 @@ impl BuildTilesArgs {
         let mut rewritten = Vec::new();
         let mut output_dir = None;
         let mut tile_zoom = DEFAULT_TILE_ZOOM;
+        let mut region_id = None;
+        let mut region_name = None;
+        let mut osm_source_id = None;
+        let mut osm_source_name = None;
         let mut index = 0;
         while index < args.len() {
             let flag = &args[index];
@@ -155,6 +163,24 @@ impl BuildTilesArgs {
                 let value = args.get(index).ok_or("--output-dir requires a value")?;
                 index += 1;
                 output_dir = Some(PathBuf::from(value));
+            } else if flag == "--region-id" {
+                let value = args.get(index).ok_or("--region-id requires a value")?;
+                index += 1;
+                region_id = Some(value.clone());
+            } else if flag == "--region-name" {
+                let value = args.get(index).ok_or("--region-name requires a value")?;
+                index += 1;
+                region_name = Some(value.clone());
+            } else if flag == "--osm-source-id" {
+                let value = args.get(index).ok_or("--osm-source-id requires a value")?;
+                index += 1;
+                osm_source_id = Some(value.clone());
+            } else if flag == "--osm-source-name" {
+                let value = args
+                    .get(index)
+                    .ok_or("--osm-source-name requires a value")?;
+                index += 1;
+                osm_source_name = Some(value.clone());
             } else {
                 let value = args
                     .get(index)
@@ -171,6 +197,11 @@ impl BuildTilesArgs {
             build: BuildDemoArgs::parse(&rewritten)?,
             output_dir,
             tile_zoom,
+            region_id: region_id.unwrap_or_else(|| "es-ct-montsant-prades-demo".into()),
+            region_name: region_name.unwrap_or_else(|| "Montsant–Siurana / Prades demo".into()),
+            osm_source_id: osm_source_id.unwrap_or_else(|| "osm-tarragona".into()),
+            osm_source_name: osm_source_name
+                .unwrap_or_else(|| "OpenStreetMap Tarragona extract".into()),
         })
     }
 }
@@ -411,6 +442,19 @@ fn build_tiles(args: &BuildTilesArgs) -> Result<String, String> {
         &args.build.extract_date,
         false,
     )?;
+    let mut single_tile = single_tile;
+    single_tile.manifest.region_id.clone_from(&args.region_id);
+    single_tile
+        .manifest
+        .region_name
+        .clone_from(&args.region_name);
+    let osm_source = single_tile
+        .manifest
+        .sources
+        .first_mut()
+        .ok_or("internal error: missing OSM source")?;
+    osm_source.id.clone_from(&args.osm_source_id);
+    osm_source.name.clone_from(&args.osm_source_name);
     let artifact = split_into_tiles(single_tile, args.tile_zoom)?;
     fs::create_dir_all(args.output_dir.join("tiles"))
         .map_err(|error| format!("could not create tile output directory: {error}"))?;

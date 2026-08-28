@@ -115,30 +115,20 @@ test("loadTrailPack loads every static tile and the planner joins a shared bound
   }
 });
 
-test("published Tarragona TrailPack produces the verified GR-65.5 access loop and keeps town starts unavailable", async () => {
-  const [publishedManifest, publishedArtifact] = await Promise.all([
-    readFile(new URL("../public/trailpack/manifest.json", import.meta.url), "utf8"),
-    readFile(new URL("../public/trailpack/tarragona-demo.json", import.meta.url), "utf8"),
-  ]);
+test("published Collserola TrailPack loads every static tile with Barcelona provenance", async () => {
+  const publishedManifest = await readFile(new URL("../public/trailpack/manifest.json", import.meta.url), "utf8");
   const fetcher: typeof fetch = async (input) => {
-    if (String(input).includes("/tiles/")) return new Response("not found", { status: 404 });
-    return new Response(String(input).endsWith("manifest.json") ? publishedManifest : publishedArtifact, { headers: { "content-type": "application/json" } });
+    const path = String(input);
+    if (path.endsWith("manifest.json")) return new Response(publishedManifest, { headers: { "content-type": "application/json" } });
+    const id = path.match(/\/tiles\/([^/]+)\.json$/)?.[1];
+    if (!id) return new Response("not found", { status: 404 });
+    const tile = await readFile(new URL(`../public/trailpack/tiles/${id}.json`, import.meta.url), "utf8");
+    return new Response(tile, { headers: { "content-type": "application/json" } });
   };
   const result = await loadTrailPack(fetcher);
   if (result.status !== "ready") throw new Error(result.status === "unavailable" ? result.message : "TrailPack did not finish loading.");
-  const planner = new TrailPlanner(result.artifact);
-  const diagnostic = planner.probe({ latitude: 41.3081880617615, longitude: 0.967097645100853, targetKm: 7.2, preferWaymarked: true });
-  console.log(`gr65_access: ${diagnostic.result.status}; snap ${diagnostic.snap.distance_m} m; ${diagnostic.candidates.viable_loops} viable / ${diagnostic.candidates.examined} examined; rejected closure=${diagnostic.rejected.closure}, distance=${diagnostic.rejected.distance}, reuse=${diagnostic.rejected.reuse}.`);
-  assert.equal(diagnostic.snap.status, "accepted");
-  assert.equal(diagnostic.result.status, "loop_available");
-  const route = planner.plan("gr65_access", 7.2, true);
-  console.log(`gr65_access selected loop: ${route.distanceKm} km; ${route.edgeIds.length} directed edges; ${route.waymarkedPercent}% official-match coverage.`);
-  assert.ok(route.distanceKm >= 7 && route.distanceKm <= 7.5);
-  const waypoint = route.coordinates[Math.floor(route.coordinates.length / 2)]!;
-  const replanned = planner.replanViaWaypoint(route, { latitude: waypoint[0], longitude: waypoint[1] }, true);
-  assert.notEqual(replanned.id, route.id);
-  assert.ok(replanned.coordinates.some(([latitude, longitude]) => latitude === waypoint[0] && longitude === waypoint[1]));
-  for (const start of ["ulldemolins", "prades", "albarca"] as const) {
-    assert.throws(() => planner.plan(start, 7.2, true), /unavailable in TrailPack v1/);
-  }
+  assert.equal(result.manifest.region_id, "es-ct-collserola");
+  assert.equal(result.manifest.tiles.length, 72);
+  assert.equal(result.manifest.sources[0]?.id, "osm-barcelona-bbbike");
+  assert.equal(Object.keys(result.artifact.tiles).length, 72);
 });

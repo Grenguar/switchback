@@ -27,7 +27,7 @@ test("WebMCP diagnostics report unavailable when the browser exposes no model co
     assert.deepEqual(result, {
       status: "unavailable",
       count: 0,
-      message: "Model context not exposed by this browser.",
+      message: "No model context was exposed by this browser session. This page is still usable manually, but no agent can call its site tools yet.",
     });
   } finally {
     restore();

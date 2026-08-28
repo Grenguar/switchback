@@ -2,6 +2,18 @@
 
 All notable changes to Switchback are documented here.
 
+## [0.1.8] - 2026-08-28
+
+### Added
+
+- A copyable, exact agent test prompt in the visible WebMCP status panel.
+- One-shot model-context rechecks when an agent browser restores focus or becomes visible after page load.
+
+### Changed
+
+- An unavailable WebMCP state now explicitly separates manual browsing from an agent-capable session and gives the ChatGPT recovery path: GPT-5.6 Sol or Terra, open the page in the agent browser, then reload or recheck.
+- Bumped the Rust workspace and web application versions from `0.1.7` to `0.1.8`.
+
 ## [0.1.7] - 2026-08-27
 
 ### Added

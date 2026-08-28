@@ -13,7 +13,7 @@ let logSequence = 0;
 app.innerHTML = `
   <main class="shell">
     <header class="masthead"><a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a><div class="status"><i class="status-dot ${bridge.status}" id="bridge-dot"></i><span id="bridge-label">Checking WebMCP…</span></div><button class="plain-button" id="register" type="button">Check model context</button></header>
-    <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p></section>
+    <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p><button class="context-help" id="copy-agent-prompt" type="button">Copy agent test prompt</button><p class="context-help-status" id="copy-agent-prompt-status" role="status" aria-live="polite"></p></div></section>
     <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
       <aside class="planner"><div class="section-label"><span>01</span><p>Route brief</p></div>
@@ -31,7 +31,7 @@ const trailMapCanvas = document.querySelector<HTMLCanvasElement>("#trail-map");
 const mapDescription = document.querySelector<HTMLElement>("#map-description");
 const trailMap = trailMapCanvas && mapDescription ? new TrailMap(trailMapCanvas, mapDescription) : undefined;
 const bridgeCopy: Record<BridgeStatus, { label: string; next: string }> = {
-  unavailable: { label: "Browser demo mode", next: "No browser model context was exposed. Open this page in a WebMCP-capable agent browser, then check again." },
+  unavailable: { label: "Browser demo mode", next: "In ChatGPT, start a fresh GPT-5.6 Sol or Terra chat, have it open this URL in its browser, then reload this page or press Check model context. A normal browser tab cannot expose agent tools." },
   registered: { label: "WebMCP connected", next: "Tools are registered on this page. Ask your agent to discover the site tools and call plan_route." },
   failed: { label: "WebMCP registration failed", next: "The browser exposed a model context but did not accept all tools. Check the message, reload the page, then try again." },
 };
@@ -96,6 +96,22 @@ document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit"
 document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => { const output = document.querySelector<HTMLOutputElement>("#distance-value"); if (output) output.value = (event.currentTarget as HTMLInputElement).value; });
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
+const agentTestPrompt = "Use the site tools on this Switchback page. Call plan_route with start gr65_access, target_km 7.2, and prefer_waymarked true. Then call get_route_summary and state the data limitations.";
+document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListener("click", async () => {
+  const status = document.querySelector<HTMLElement>("#copy-agent-prompt-status");
+  try {
+    await navigator.clipboard.writeText(agentTestPrompt);
+    if (status) status.textContent = "Test prompt copied. Paste it into the same ChatGPT conversation after the page shows WebMCP connected.";
+  } catch {
+    if (status) status.textContent = `Copy unavailable. Use this prompt: ${agentTestPrompt}`;
+  }
+});
+
+// Some agent browsers attach their model context after the document's first
+// script turn. Retry once when the tab becomes active, without polling or
+// changing a successfully registered tool set.
+window.addEventListener("focus", () => { if (bridge.status === "unavailable") void checkModelContext(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && bridge.status === "unavailable") void checkModelContext(); });
 
 type MapWaypoint = { latitude: number; longitude: number };
 let stagedWaypoint: MapWaypoint | undefined;

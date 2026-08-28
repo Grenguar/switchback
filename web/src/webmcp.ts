@@ -8,7 +8,13 @@ let registrationController: AbortController | undefined;
 
 export async function registerWebMcpTools(routeReady = false): Promise<{ status: BridgeStatus; count: number; message: string }> {
   const mc = document.modelContext ?? navigator.modelContext;
-  if (!mc?.registerTool) return { status: "unavailable", count: 0, message: "Model context not exposed by this browser." };
+  if (!mc?.registerTool) {
+    return {
+      status: "unavailable",
+      count: 0,
+      message: "No model context was exposed by this browser session. This page is still usable manually, but no agent can call its site tools yet.",
+    };
+  }
   registrationController?.abort();
   registrationController = new AbortController();
   const contracts = routeReady ? activeRouteToolContracts : baseToolContracts;

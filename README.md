@@ -1,22 +1,23 @@
 # Switchback
 
-Source-backed trails, made loopable at the length you have time for — planned
-with an agent on a live offline map.
+Source-backed Collserola trails, made loopable at the length you have time for
+— planned with an agent on a live map.
 
 Switchback is an entry for the OpenAI WebMCP Challenge. Its first region is
-Tarragona, Catalunya: the offline pipeline produces a portable **TrailPack**
-from authorised sources, and the static web app will help a hiker or trail
-runner explore routes around the Montsant–Siurana demo area.
+Collserola, Barcelona: an offline pipeline produces a portable, tiled
+**TrailPack** from local OSM and CNIG/FEDME inputs. A hiker and an agent share
+the same live route-planning surface: the agent calls inspectable site tools,
+and the person sees the resulting directed route on the map.
 
 ## MVP status
 
 This repository is being built as a feasibility spike. The goal is to prove a
 small, honest end-to-end loop before expanding the product:
 
-1. Build and load a TrailPack containing walking graph tiles and provenance.
-2. Generate plausible loops on the browser map.
-3. Expose six planning actions as browser-native WebMCP tools.
-4. Keep the static app publicly deployable and independently testable.
+1. Build and load a provenance-carrying TrailPack with 72 Collserola tiles.
+2. Generate a directed loop on the browser map from the verified GR-6 Horta access.
+3. Expose six planning actions as browser-native WebMCP site tools.
+4. Let the person inspect, alter, and export the same route the agent planned.
 
 The app is intentionally static: no user account, private trail history, or
 server-side itinerary store is required for the MVP.
@@ -30,9 +31,9 @@ pnpm --dir web install
 pnpm --dir web dev
 ```
 
-Netlify is configured to build from `web/` with `pnpm run build` and publish
-`dist`. The shipped map draws the local TrailPack graph directly on Canvas; it
-does not depend on a runtime routing or map-tile service.
+Netlify builds from `web/` with `pnpm run build` and publishes `dist`. Routing
+uses only the local TrailPack graph; OpenStreetMap raster tiles are a visual
+reference layer with visible attribution, not a routing dependency.
 
 Run the complete offline validation and evidence bundle from a Node 24 shell:
 
@@ -41,7 +42,7 @@ bash scripts/evaluate-mvp-offline.sh
 ```
 
 See [`docs/MVP-EVALUATION.md`](docs/MVP-EVALUATION.md) for measured Q3/Q6
-evidence and the remaining manual browser-host checks.
+evidence and [`docs/DEMO.md`](docs/DEMO.md) for the WebMCP walkthrough.
 
 ## Data, attribution, and scope
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, type PlannedRoute } from "../src/planner";
-import { setGpxRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
+import { setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -55,14 +55,18 @@ test("plan_route renders a directed TrailPack loop before returning", async () =
   const tool = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(tool);
   await assert.rejects(() => tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true, max_ascent_m: 900 }), /no elevation/);
   const observed: string[] = [];
+  let renderedTarget: number | undefined;
+  setPlanTargetRenderer((targetKm) => { renderedTarget = targetKm; });
   setToolInvocationObserver((name) => observed.push(name));
   const result = await tool.execute({ start: "gr65_access", target_km: 3, prefer_waymarked: true }) as { rendered: boolean; distance_km: number; official_match_percent: number };
   assert.equal(result.rendered, true); assert.equal(result.distance_km, 2.8); assert.equal(result.official_match_percent, 36); assert.equal("waymarked_percent" in result, false); assert.ok(rendered); assert.deepEqual(observed, ["plan_route"]); assert.ok(JSON.stringify(result).length <= 1_500);
+  assert.equal(renderedTarget, 3);
   const summary = toolContracts.find((candidate) => candidate.name === "get_route_summary"); assert.ok(summary);
   const summaryResult = await summary.execute({}) as { notable_segments: Array<Record<string, unknown>> };
   assert.equal("waymarked" in summaryResult.notable_segments[0]!, false);
   assert.equal("official_match" in summaryResult.notable_segments[0]!, true);
   setToolInvocationObserver(undefined);
+  setPlanTargetRenderer(undefined);
 });
 
 test("planner probe reports snap, closure, distance, and reuse evidence without widening route acceptance", () => {
@@ -131,4 +135,7 @@ test("published Collserola TrailPack loads every static tile with Barcelona prov
   assert.equal(result.manifest.tiles.length, 72);
   assert.equal(result.manifest.sources[0]?.id, "osm-barcelona-bbbike");
   assert.equal(Object.keys(result.artifact.tiles).length, 72);
+  const planner = new TrailPlanner(result.artifact);
+  const circuit = planner.plan("gr6_horta_access", 7.2, true);
+  assert.ok(Math.abs(circuit.distanceKm - 7.2) <= 7.2 * 0.15, `expected a circuit close to 7.2 km, received ${circuit.distanceKm} km`);
 });

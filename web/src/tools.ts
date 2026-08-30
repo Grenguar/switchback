@@ -15,12 +15,15 @@ let planner: TrailPlanner | undefined;
 let activeRoute: PlannedRoute | undefined;
 let routeSession: RouteSession | undefined;
 let renderRoute: ((route: PlannedRoute) => void | Promise<void>) | undefined;
+let renderPlanTarget: ((targetKm: number) => void | Promise<void>) | undefined;
 let renderGpx: GpxRenderer | undefined;
 let invocationObserver: ToolInvocationObserver | undefined;
 
 export function setTrailPackProvenance(dataset: string, sources: string[]): void { provenance = { dataset, sources: [...sources] }; }
 export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; }
 export function setRouteRenderer(renderer: (route: PlannedRoute) => void | Promise<void>): void { renderRoute = renderer; }
+/** Keeps the visible route brief aligned when an agent, rather than the form, plans a route. */
+export function setPlanTargetRenderer(renderer: ((targetKm: number) => void | Promise<void>) | undefined): void { renderPlanTarget = renderer; }
 /** Receives a prepared GPX before the tool confirms completion to an agent. */
 export function setGpxRenderer(renderer: GpxRenderer | undefined): void { renderGpx = renderer; }
 /** Receives every UI or browser-agent tool call after it settles, without changing its result. */
@@ -49,7 +52,7 @@ const positive = (value: unknown, field: string, maximum: number): number => { i
 const choice = <T extends string>(value: unknown, field: string, values: readonly T[]): T => { if (typeof value !== "string" || !values.includes(value as T)) throw new Error(`${field} must be one of: ${values.join(", ")}.`); return value as T; };
 const text = (value: unknown, field: string): string => { if (typeof value !== "string" || value.trim().length === 0 || value.length > 120) throw new Error(`${field} must be a concise string of at most 120 characters.`); return value.trim(); };
 const abortable = async <T>(signal: AbortSignal | undefined, result: T): Promise<T> => { if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError"); await Promise.resolve(); if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError"); if (JSON.stringify(result).length > OUTPUT_LIMIT) throw new Error("Tool output exceeded the 1.5K character budget."); return result; };
-const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Call plan_route with the available GR-65.5 trail access first."); return activeRoute; };
+const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Call plan_route with the available GR-6 Horta trail access first."); return activeRoute; };
 const routeOutput = (route: PlannedRoute) => ({ route: route.name, start: route.start.name, distance_km: route.distanceKm, ascent_m: null, duration_hours: route.durationHours, official_match_percent: route.waymarkedPercent, source: route.source, attribution: provenance });
 const segmentOutput = (segment: PlannedRoute["segments"][number]) => ({ name: segment.name, surface: segment.surface, sac_scale: segment.sac_scale, official_match: segment.waymarked, official_match_ref: segment.official_ref });
 const xml = (value: string): string => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
@@ -86,6 +89,7 @@ const rawToolContracts: ToolContract[] = [
       if (!planner) throw new Error("TrailPack graph is not ready; wait for its data status before planning.");
       const next = planner.plan(start, targetKm, data.prefer_waymarked);
       // Rendering is part of the tool's completion contract: a response never claims a loop before the map receives it.
+      await renderPlanTarget?.(targetKm);
       await renderRoute?.(next);
       activeRoute = next;
       routeSession = new RouteSession(next, targetKm);
@@ -153,7 +157,7 @@ const rawToolContracts: ToolContract[] = [
         edit: "No manual waypoint edit has been made in this session.",
         delta_distance_km: 0,
         delta_ascent_m: null,
-        next_step: "Use plan_route with gr65_access, then drag the through-point or move it with arrow keys and press Enter.",
+        next_step: "Use plan_route with gr6_horta_access, then drag the through-point or move it with arrow keys and press Enter.",
         attribution: provenance,
       });
       return abortable(signal, {

@@ -74,6 +74,10 @@ type HeapItem = { node: number; distance: number };
 
 const MIN_LOOP_METRES = 1_000;
 const MAX_LOOP_METRES = 60_000;
+// A circuit is useful only if it is recognisably close to the requested
+// distance. This still permits normal routing variation on a trail network,
+// but never silently substitutes a much shorter outing.
+const MAX_TARGET_ERROR_FRACTION = 0.15;
 // A documented trailhead must land close enough to an actual graph node that
 // the UI never silently starts a route from an unrelated trail.
 const MAX_SNAP_METRES = 1_000;
@@ -158,13 +162,14 @@ export class TrailPlanner {
       if (shared > 0.75) continue;
       const total = outEdges.concat(returnEdges).reduce((sum, edge) => sum + edge.length_m, 0);
       if (total > MAX_LOOP_METRES) continue;
+      if (Math.abs(total - targetMetres) > targetMetres * MAX_TARGET_ERROR_FRACTION) continue;
       const officialPenalty = preferWaymarked ? (outEdges.concat(returnEdges).filter((edge) => edge.official === null).length / (outEdges.length + returnEdges.length)) * 500 : 0;
       const score = Math.abs(total - targetMetres) + officialPenalty;
       if (!winner || score < winner.score) winner = { score, edges: [...outEdges, ...returnEdges] };
     }
     if (!winner) {
       const diagnostic = this.probe({ latitude: start.latitude, longitude: start.longitude, targetKm, preferWaymarked });
-      throw new Error(`${diagnostic.result.message} Rejected candidates: ${diagnostic.rejected.closure} closure, ${diagnostic.rejected.distance} distance, ${diagnostic.rejected.reuse} reuse.`);
+      throw new Error(`No non-retracing circuit within ${Math.round(MAX_TARGET_ERROR_FRACTION * 100)}% of ${targetKm} km can be formed from this TrailPack start. ${diagnostic.result.message} Rejected candidates: ${diagnostic.rejected.closure} closure, ${diagnostic.rejected.distance} distance, ${diagnostic.rejected.reuse} reuse.`);
     }
     return this.toPlannedRoute(start, winner.edges);
   }
@@ -365,7 +370,11 @@ export class TrailPlanner {
         const edge = this.edges[edgeIndex]!;
         if (blockedPhysicalIds.has(edge.physical_id)) continue;
         const next = reverse ? edge.from : edge.to;
-        const cost = edge.length_m + (preferWaymarked && edge.official === null ? 15 : 0);
+        // The preference must not depend on OSM way segmentation: a fixed
+        // per-edge surcharge made densely mapped paths look artificially long
+        // and returned dramatically shorter circuits. A small proportional
+        // bias retains the preference without changing distance semantics.
+        const cost = edge.length_m * (preferWaymarked && edge.official === null ? 1.02 : 1);
         const candidate = item.distance + cost;
         if (candidate < distance[next]!) { distance[next] = candidate; previous[next] = edgeIndex; queue.push({ node: next, distance: candidate }); }
       }
@@ -383,7 +392,7 @@ export class TrailPlanner {
       for (const edgeIndex of this.outgoing[item.node]!) {
         const edge = this.edges[edgeIndex]!;
         if (blockedPhysicalIds.has(edge.physical_id)) continue;
-        const candidate = item.distance + edge.length_m + (preferWaymarked && edge.official === null ? 15 : 0);
+        const candidate = item.distance + edge.length_m * (preferWaymarked && edge.official === null ? 1.02 : 1);
         if (candidate < distance[edge.to]!) { distance[edge.to] = candidate; previous[edge.to] = edgeIndex; queue.push({ node: edge.to, distance: candidate }); }
       }
     }

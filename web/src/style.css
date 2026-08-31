@@ -44,3 +44,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .gpx-export a:hover { background: #315c48; }
 .gpx-export a:focus-visible { outline-color: #173328; }
 @media (max-width: 760px) { .masthead { height: auto; min-height: 70px; gap: 12px; } }
+
+/* A trailhead-first planner: clear choices, one primary action, no hidden units. */
+.planner { gap: 0; }
+.planner form { gap: 20px; }
+.route-question label, .start-picker legend, .distance-picker legend { color: #edf0e5; font-size: .73rem; }
+.route-request-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 9px; }
+.route-request-row input { min-width: 0; min-height: 48px; margin: 0 !important; padding: 11px 12px !important; color: #173328 !important; background: #edf0e5 !important; border: 1px solid #edf0e5 !important; border-radius: 4px; }
+.route-request-row input::placeholder { color: #4f675d; }
+.plan-button.compact { min-height: 48px; padding: 10px 12px; white-space: nowrap; }
+.start-picker, .distance-picker { display: grid; gap: 10px; }
+.start-options { display: grid; gap: 8px; }
+.start-option { width: 100%; min-height: 58px; display: grid; gap: 3px; padding: 10px 12px; color: #dce6de; text-align: left; background: transparent; border: 1px solid #607a6d; border-radius: 4px; transition: background .16s ease, border-color .16s ease, color .16s ease; }
+.start-option strong { font-size: .82rem; }
+.start-option small { color: #aac0b4; font-size: .66rem; line-height: 1.35; }
+.start-option[aria-pressed=true] { color: #173328; background: #dce9a0; border-color: #dce9a0; }
+.start-option[aria-pressed=true] small { color: #315445; }
+.start-option:hover { border-color: #b7cf5c; }
+.distance-picker input[type=range] { margin: 0; }
+.distance-steps { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; }
+.distance-step { min-width: 0; min-height: 32px; padding: 4px 0; color: #c4d1c8; background: transparent; border: 1px solid #49655a; border-radius: 3px; font: .63rem 'DM Mono', monospace; transition: background .16s ease, color .16s ease, border-color .16s ease; }
+.distance-step[aria-pressed=true] { color: #173328; background: #b7cf5c; border-color: #b7cf5c; font-weight: 700; }
+.distance-step:hover { border-color: #b7cf5c; }
+.distance-picker output { float: right; color: #b7cf5c; }
+@media (max-width: 760px) { .route-request-row { grid-template-columns: 1fr; }.distance-steps { grid-template-columns: repeat(6, minmax(0, 1fr)); }.distance-step { min-height: 40px; font-size: .68rem; } }

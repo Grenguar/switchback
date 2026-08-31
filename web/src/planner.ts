@@ -9,18 +9,30 @@ export type StartDefinition = {
   description: string;
 };
 
-// `gr65_access` is deliberately described as an on-trail access coordinate,
-// rather than a town or a trailhead. It is a point from the source-backed
-// GR-65.5 trace that lands on the v1 graph. The town labels remain visible so
-// the MVP does not imply they are usable starts before access links are vetted.
 export const documentedStarts = {
-  vallvidrera_access: {
-    id: "vallvidrera_access",
-    name: "Vallvidrera trail access",
+  font_groga_parking: {
+    id: "font_groga_parking",
+    name: "Font Groga car park",
+    latitude: 41.427793,
+    longitude: 2.1176235,
+    availability: "available",
+    description: "Car-access trailhead at Mirador de la Font Groga, verified 29 m from the Collserola trail graph.",
+  },
+  vista_rica_parking: {
+    id: "vista_rica_parking",
+    name: "Vista Rica car park",
+    latitude: 41.431472,
+    longitude: 2.126,
+    availability: "available",
+    description: "Car-access trailhead at the Vista Rica parking area on the Arrabassada road, verified 14 m from the Collserola trail graph.",
+  },
+  vallvidrera_crest_access: {
+    id: "vallvidrera_crest_access",
+    name: "Cresta de Collserola access",
     latitude: 41.426059751015,
     longitude: 2.116789968413,
     availability: "available",
-    description: "Verified on-trail coordinate from the CNIG/FEDME PR-C-035 Cresta de Collserola source trace; not a town or a road-side proxy.",
+    description: "On-trail access coordinate from the CNIG/FEDME PR-C-035 Cresta de Collserola source trace.",
   },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;

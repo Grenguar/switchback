@@ -52,14 +52,10 @@ const positive = (value: unknown, field: string, maximum: number): number => { i
 const choice = <T extends string>(value: unknown, field: string, values: readonly T[]): T => { if (typeof value !== "string" || !values.includes(value as T)) throw new Error(`${field} must be one of: ${values.join(", ")}.`); return value as T; };
 const text = (value: unknown, field: string): string => { if (typeof value !== "string" || value.trim().length === 0 || value.length > 120) throw new Error(`${field} must be a concise string of at most 120 characters.`); return value.trim(); };
 const abortable = async <T>(signal: AbortSignal | undefined, result: T): Promise<T> => { if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError"); await Promise.resolve(); if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError"); if (JSON.stringify(result).length > OUTPUT_LIMIT) throw new Error("Tool output exceeded the 1.5K character budget."); return result; };
-const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Call plan_route with the available Vallvidrera trail access first."); return activeRoute; };
+const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Ask for a loop from Font Groga car park, Vista Rica car park, or Cresta de Collserola access first."); return activeRoute; };
 const routeOutput = (route: PlannedRoute) => ({ route: route.name, start: route.start.name, distance_km: route.distanceKm, ascent_m: null, duration_hours: route.durationHours, official_match_percent: route.waymarkedPercent, source: route.source, attribution: provenance });
 const segmentOutput = (segment: PlannedRoute["segments"][number]) => ({ name: segment.name, surface: segment.surface, sac_scale: segment.sac_scale, official_match: segment.waymarked, official_match_ref: segment.official_ref });
 const xml = (value: string): string => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
-const boundedCoordinates = (coordinates: PlannedRoute["coordinates"], maximum = 12): PlannedRoute["coordinates"] => {
-  if (coordinates.length <= maximum) return coordinates;
-  return Array.from({ length: maximum }, (_, index) => coordinates[Math.round(index * (coordinates.length - 1) / (maximum - 1))]!);
-};
 const transitionWaypointsFor = (route: PlannedRoute): PreparedGpx["transitions"] => {
   const count = 5;
   return Array.from({ length: count }, (_, index) => {
@@ -69,22 +65,25 @@ const transitionWaypointsFor = (route: PlannedRoute): PreparedGpx["transitions"]
   });
 };
 const gpxFor = (route: PlannedRoute): PreparedGpx => {
-  const points = boundedCoordinates(route.coordinates);
+  // GPX consumers such as Wikiloc draw straight lines between track points.
+  // Preserve every graph vertex so that the exported line follows the actual
+  // trail geometry rather than cutting across the terrain between samples.
+  const points = route.coordinates;
   const transitions = transitionWaypointsFor(route);
   const attribution = provenance.sources.join("; ");
-  const content = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Switchback TrailPack" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${xml(route.name)}</name><desc>${xml(`Simplified TrailPack route. Elevation values are unavailable in this TrailPack. ${route.source}. ${attribution}`)}</desc></metadata>${transitions.map((point) => `<wpt lat="${point.latitude.toFixed(6)}" lon="${point.longitude.toFixed(6)}"><name>${xml(point.name)}</name><desc>${xml(`TrailPack transition on ${point.segmentName}`)}</desc></wpt>`).join("")}<trk><name>${xml(route.name)}</name><trkseg>${points.map(([latitude, longitude]) => `<trkpt lat="${latitude.toFixed(6)}" lon="${longitude.toFixed(6)}"/>`).join("")}</trkseg></trk></gpx>`;
+  const content = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Switchback TrailPack" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${xml(route.name)}</name><desc>${xml(`Full TrailPack graph trace. Elevation values are unavailable in this TrailPack. ${route.source}. ${attribution}`)}</desc></metadata>${transitions.map((point) => `<wpt lat="${point.latitude.toFixed(6)}" lon="${point.longitude.toFixed(6)}"><name>${xml(point.name)}</name><desc>${xml(`TrailPack transition on ${point.segmentName}`)}</desc></wpt>`).join("")}<trk><name>${xml(route.name)}</name><trkseg>${points.map(([latitude, longitude]) => `<trkpt lat="${latitude.toFixed(6)}" lon="${longitude.toFixed(6)}"/>`).join("")}</trkseg></trk></gpx>`;
   return Object.freeze({ filename: "switchback-trailpack-route.gpx", content, exportedPoints: points.length, originalPoints: route.coordinates.length, transitions });
 };
 
 const rawToolContracts: ToolContract[] = [
   {
-    name: "plan_route", description: "Plan and render a directed Collserola–Vallvidrera TrailPack loop from the documented trail access. Use `vallvidrera_access`, the verified on-trail PR-C-035 Cresta de Collserola coordinate. The pack excludes urban footways and paved access roads. Elevation and grade filters explicitly reject because this artifact has no elevation data.", annotations: untrusted,
-    inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: Object.keys(documentedStarts), description: "Use vallvidrera_access for the published Collserola–Vallvidrera TrailPack." }, target_km: { type: "number", minimum: 1, maximum: 60, description: "Desired directed loop distance in kilometres; use 7.2 km for the Vallvidrera demonstration." }, prefer_waymarked: { type: "boolean", description: "Bias toward CNIG/FEDME official-match evidence. It does not confirm present-day waymarking." }, max_ascent_m: { type: "number", description: "Unsupported: this TrailPack has no elevation values, so the request is rejected." }, max_grade: { type: "string", description: "Unsupported: this TrailPack has incomplete grade tags, so the request is rejected." } } },
+    name: "plan_route", description: "Plan and render a real non-retracing Collserola–Vallvidrera trail circuit. Choose a car-park start (`font_groga_parking` or `vista_rica_parking`) or `vallvidrera_crest_access`; then ask for the distance in kilometres. The pack excludes urban footways and paved access roads. Elevation and grade filters explicitly reject because this artifact has no elevation data.", annotations: untrusted,
+    inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: Object.keys(documentedStarts), description: "Where the walk begins: Font Groga car park, Vista Rica car park, or Cresta de Collserola access." }, target_km: { type: "number", minimum: 1, maximum: 30, description: "Desired circuit distance in whole kilometres from 1 through 30." }, prefer_waymarked: { type: "boolean", description: "Bias toward CNIG/FEDME official-match evidence. It does not confirm present-day waymarking." }, max_ascent_m: { type: "number", description: "Unsupported: this TrailPack has no elevation values, so the request is rejected." }, max_grade: { type: "string", description: "Unsupported: this TrailPack has incomplete grade tags, so the request is rejected." } } },
     execute: async (input, signal) => {
       const data = object(input); only(data, ["start", "target_km", "prefer_waymarked", "max_ascent_m", "max_grade"]);
       if (data.max_ascent_m !== undefined) throw new Error("max_ascent_m is unsupported: the loaded TrailPack has no elevation values.");
       if (data.max_grade !== undefined) throw new Error("max_grade is unsupported: the loaded TrailPack has incomplete grade tags.");
-      const start = choice(data.start, "start", Object.keys(documentedStarts) as StartId[]); const targetKm = positive(data.target_km, "target_km", 60);
+      const start = choice(data.start, "start", Object.keys(documentedStarts) as StartId[]); const targetKm = positive(data.target_km, "target_km", 30);
       if (typeof data.prefer_waymarked !== "boolean") throw new Error("prefer_waymarked must be true or false.");
       if (!planner) throw new Error("TrailPack graph is not ready; wait for its data status before planning.");
       const next = planner.plan(start, targetKm, data.prefer_waymarked);
@@ -127,7 +126,7 @@ const rawToolContracts: ToolContract[] = [
     },
   },
   {
-    name: "prepare_gpx", description: "Prepare a bounded GPX 1.1 route with five named TrailPack transitions and reveal a user-gesture download control. It never starts a download or shares a file itself.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    name: "prepare_gpx", description: "Prepare a full-resolution GPX 1.1 trail trace with five named TrailPack transitions and reveal a user-gesture download control. It never starts a download or shares a file itself.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => {
       only(object(input), []);
       const route = current();
@@ -143,7 +142,7 @@ const rawToolContracts: ToolContract[] = [
         elevation_values: "unavailable in this TrailPack",
         original_route_points: gpx.originalPoints,
         exported_points: gpx.exportedPoints,
-        simplification: "Bounded 12-point track representation; inspect it before using it for navigation.",
+        trace_detail: "Every TrailPack graph vertex is included so GPX viewers can draw the routed trail line.",
         next_step: "Tell the user that Switchback has revealed the Download GPX control. They must click it themselves to save or import the file; no download was started.",
       });
     },
@@ -157,7 +156,7 @@ const rawToolContracts: ToolContract[] = [
         edit: "No manual waypoint edit has been made in this session.",
         delta_distance_km: 0,
         delta_ascent_m: null,
-        next_step: "Use plan_route with vallvidrera_access, then drag the through-point or move it with arrow keys and press Enter.",
+        next_step: "Use plan_route from a listed car park, then drag the through-point or move it with arrow keys and press Enter.",
         attribution: provenance,
       });
       return abortable(signal, {

@@ -1,6 +1,6 @@
 import "./style.css";
 import { commitWaypointEdit, documentedStarts, getActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
-import { TrailPlanner, type PlannedRoute } from "./planner";
+import { TrailPlanner, type PlannedRoute, type StartId } from "./planner";
 import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { TrailMap } from "./trail-map";
 import { registerWebMcpTools, type BridgeStatus } from "./webmcp";
@@ -16,11 +16,11 @@ app.innerHTML = `
     <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p><button class="context-help" id="copy-agent-prompt" type="button">Copy agent test prompt</button><p class="context-help-status" id="copy-agent-prompt-status" role="status" aria-live="polite"></p></div></section>
     <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
-      <aside class="planner"><div class="section-label"><span>01</span><p>Route brief</p></div>
-        <form id="plan-form"><label for="start">Route start<select id="start" name="start">${Object.values(documentedStarts).map((start) => `<option value="${start.id}" selected>${start.name}</option>`).join("")}</select></label><p class="field-hint" id="start-hint">Vallvidrera access is a verified on-trail coordinate on the PR-C-035 Cresta de Collserola trace, not a town or a road-side proxy.</p><label for="distance">Target distance <span class="field-value"><output id="distance-value">7.2</output> km</span><input id="distance" name="distance" type="range" min="2" max="30" step="0.1" value="7.2" /></label><fieldset><legend>Route character</legend><div class="choices"><label><input type="radio" name="character" value="waymarked" checked /> Prefer official-match evidence</label><label><input type="radio" name="character" value="neutral" /> Neutral</label></div></fieldset><p class="field-hint">The graph excludes urban footways and paved access roads. Official matching is evidence, not a waymarking confirmation. Elevation and grade constraints are not sent: this TrailPack has no elevation values and incomplete grade tags.</p><button class="plan-button" type="submit">Generate data-backed loop <span>↗</span></button></form>
+      <aside class="planner"><div class="section-label"><span>01</span><p>Plan a walk</p></div>
+        <form id="plan-form"><div class="route-question"><label for="route-request">What sounds good?</label><div class="route-request-row"><input id="route-request" type="text" autocomplete="off" placeholder="A relaxed 7 km loop from Font Groga" /><button class="plan-button compact" type="submit">Plan it <span aria-hidden="true">↗</span></button></div><p class="field-hint" id="route-request-hint">Or pick a car park and distance below. Nothing is sent anywhere.</p></div><fieldset class="start-picker"><legend>Start from your car</legend><div class="start-options" role="group" aria-label="Available trailheads">${Object.values(documentedStarts).map((start, index) => `<button class="start-option" type="button" data-start="${start.id}" aria-pressed="${index === 0}"><strong>${start.name}</strong><small>${start.description}</small></button>`).join("")}</div><p class="field-hint" id="start-hint">Font Groga and Vista Rica are car parks; Cresta is an on-trail alternative.</p></fieldset><fieldset class="distance-picker"><legend>How far today? <output id="distance-value">7</output> km</legend><input id="distance" name="distance" type="range" min="1" max="30" step="1" value="7" aria-describedby="distance-help" /><div class="distance-steps" role="group" aria-label="Distance in kilometres">${Array.from({ length: 30 }, (_, index) => `<button type="button" class="distance-step" data-distance="${index + 1}" aria-pressed="${index + 1 === 7}">${index + 1}</button>`).join("")}</div><p class="field-hint" id="distance-help">Kilometres only — choose any whole number from 1 to 30.</p></fieldset><fieldset><legend>Route character</legend><div class="choices"><label><input type="radio" name="character" value="waymarked" checked /> Prefer official-match evidence</label><label><input type="radio" name="character" value="neutral" /> Just find me a trail loop</label></div></fieldset><p class="field-hint">The graph excludes urban footways and paved access roads. Official matching is evidence, not a waymarking confirmation. Elevation and grade constraints are not available yet.</p></form>
         <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
-    <section class="map-panel" id="map-panel" aria-label="TrailPack route preview on an OpenStreetMap reference map"><canvas class="trail-map" id="trail-map" aria-hidden="true"></canvas><p class="map-description" id="map-description" role="status">Loading the TrailPack route map.</p><button class="waypoint-handle" id="waypoint-handle" type="button" disabled aria-describedby="waypoint-help waypoint-update" aria-label="Route through-point. Plan a route before moving it."><span aria-hidden="true"></span></button><p class="waypoint-help" id="waypoint-help">Drag the through-point to request a graph replan. Keyboard: use arrow keys to position it, then Enter to apply; Escape cancels.</p><p class="waypoint-update" id="waypoint-update" role="status" aria-live="polite">Plan a route to enable the through-point.</p><div class="map-key"><span><i class="network-swatch"></i>TrailPack network</span><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div><p class="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></p><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Waiting for graph</p><h2 id="route-name">Use the verified Vallvidrera access</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">A loop is rendered only after the directed TrailPack graph has found one.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
+    <section class="map-panel" id="map-panel" aria-label="TrailPack route preview on an OpenStreetMap reference map"><canvas class="trail-map" id="trail-map" aria-hidden="true"></canvas><p class="map-description" id="map-description" role="status">Loading the TrailPack route map.</p><button class="waypoint-handle" id="waypoint-handle" type="button" disabled aria-describedby="waypoint-help waypoint-update" aria-label="Route through-point. Plan a route before moving it."><span aria-hidden="true"></span></button><p class="waypoint-help" id="waypoint-help">Drag the through-point to request a graph replan. Keyboard: use arrow keys to position it, then Enter to apply; Escape cancels.</p><p class="waypoint-update" id="waypoint-update" role="status" aria-live="polite">Plan a route to enable the through-point.</p><div class="map-key"><span><i class="network-swatch"></i>TrailPack network</span><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div><p class="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></p><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a car park</p><h2 id="route-name">Tell us what kind of walk you want</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">We only draw a loop after the trail graph finds one.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
     </section>
     <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Six small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>0${index + 1}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
@@ -86,7 +86,7 @@ function renderRoute(route: PlannedRoute): void {
   clearPreparedGpx();
   const state = document.querySelector<HTMLElement>("#route-state");
   const name = document.querySelector<HTMLElement>("#route-name"); const distance = document.querySelector<HTMLElement>("#route-distance"); const duration = document.querySelector<HTMLElement>("#route-duration"); const kicker = document.querySelector<HTMLElement>("#route-kicker"); const note = document.querySelector<HTMLElement>("#route-note");
-  if (state) state.textContent = "Directed TrailPack loop"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Graph-planned loop"; if (note) note.textContent = `${route.waymarkedPercent}% official-match coverage. Elevation unknown; verify current local conditions.`;
+  if (state) state.textContent = "Your trail circuit"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Ready to walk"; if (note) note.textContent = `${route.waymarkedPercent}% official-match coverage. Elevation unknown; check local conditions before you go.`;
   trailMap?.setRoute(route);
   const midpoint = route.coordinates[Math.floor(route.coordinates.length / 2)];
   if (midpoint) setWaypointPosition(midpoint[0], midpoint[1], false);
@@ -97,12 +97,6 @@ function renderRoute(route: PlannedRoute): void {
 }
 let currentManifestBbox: [number, number, number, number] = [0.86, 41.23, 0.99, 41.34];
 setRouteRenderer(renderRoute);
-setPlanTargetRenderer((targetKm) => {
-  const distance = document.querySelector<HTMLInputElement>("#distance");
-  const value = document.querySelector<HTMLOutputElement>("#distance-value");
-  if (distance) distance.value = String(targetKm);
-  if (value) value.value = String(targetKm);
-});
 
 function renderTrailPack(state: TrailPackLoadState): void {
   const status = document.querySelector<HTMLElement>("#trailpack-status"); const region = document.querySelector<HTMLElement>("#trailpack-region"); const sources = document.querySelector<HTMLUListElement>("#trailpack-sources"); const mapLabel = document.querySelector<HTMLElement>("#map-data-label");
@@ -119,12 +113,39 @@ async function invoke(name: string, input: Record<string, unknown>): Promise<voi
   const tool = toolContracts.find((candidate) => candidate.name === name); if (!tool) return;
   try { await tool.execute(input, new AbortController().signal); } catch { /* The shared tool observer already records the failure. */ }
 }
-const planInput = (): Record<string, unknown> => ({ start: document.querySelector<HTMLSelectElement>("#start")?.value ?? "vallvidrera_access", target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7.2), prefer_waymarked: document.querySelector<HTMLInputElement>("input[name=character]:checked")?.value === "waymarked" });
-document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); void invoke("plan_route", planInput()); });
-document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => { const output = document.querySelector<HTMLOutputElement>("#distance-value"); if (output) output.value = (event.currentTarget as HTMLInputElement).value; });
+let selectedStart: StartId = "font_groga_parking";
+const setDistance = (requestedKm: number): void => {
+  const distanceKm = Math.min(30, Math.max(1, Math.round(requestedKm)));
+  const distance = document.querySelector<HTMLInputElement>("#distance");
+  const value = document.querySelector<HTMLOutputElement>("#distance-value");
+  if (distance) distance.value = String(distanceKm);
+  if (value) value.value = String(distanceKm);
+  document.querySelectorAll<HTMLButtonElement>(".distance-step").forEach((button) => button.setAttribute("aria-pressed", String(Number(button.dataset.distance) === distanceKm)));
+};
+const setStart = (start: StartId): void => {
+  selectedStart = start;
+  document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.start === start)));
+};
+const planInput = (): Record<string, unknown> => ({ start: selectedStart, target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7), prefer_waymarked: document.querySelector<HTMLInputElement>("input[name=character]:checked")?.value === "waymarked" });
+const applyPlainLanguageRequest = (): void => {
+  const request = document.querySelector<HTMLInputElement>("#route-request")?.value.trim().toLocaleLowerCase() ?? "";
+  const requestedDistance = request.match(/\b([1-9]|[12]\d|30)\s*(?:km|kilomet(?:re|er|ers|res)?s?)\b/i)?.[1];
+  if (requestedDistance) setDistance(Number(requestedDistance));
+  if (request.includes("vista rica")) setStart("vista_rica_parking");
+  else if (request.includes("cresta") || request.includes("vallvidrera")) setStart("vallvidrera_crest_access");
+  else if (request.includes("font groga") || request.includes("groga")) setStart("font_groga_parking");
+  if (request.includes("neutral") || request.includes("any trail")) document.querySelector<HTMLInputElement>("input[name=character][value=neutral]")!.checked = true;
+  const hint = document.querySelector<HTMLElement>("#route-request-hint");
+  if (hint && request) hint.textContent = `Got it: ${documentedStarts[selectedStart].name}, ${document.querySelector<HTMLInputElement>("#distance")?.value} km.`;
+};
+document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); applyPlainLanguageRequest(); void invoke("plan_route", planInput()); });
+document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => setDistance(Number((event.currentTarget as HTMLInputElement).value)));
+document.querySelectorAll<HTMLButtonElement>(".distance-step").forEach((button) => button.addEventListener("click", () => setDistance(Number(button.dataset.distance))));
+document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.addEventListener("click", () => setStart(button.dataset.start as StartId)));
+setPlanTargetRenderer(setDistance);
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
-const agentTestPrompt = "Use the site tools on this Switchback page. Call plan_route with start vallvidrera_access, target_km 7.2, and prefer_waymarked true. Then call get_route_summary and state the data limitations.";
+const agentTestPrompt = "Use the site tools on this Switchback page. Plan a 7 km loop from Font Groga car park, preferring official-match evidence. Then call get_route_summary and state the data limitations.";
 document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListener("click", async () => {
   const status = document.querySelector<HTMLElement>("#copy-agent-prompt-status");
   try {

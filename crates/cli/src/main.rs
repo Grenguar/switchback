@@ -10,7 +10,8 @@ use switchback_ingest::CnigFedmeSource;
 use switchback_matcher::{GraphEdge, Point, match_polyline};
 use switchback_osm::{
     Access, GeoPoint, MaterializedWay, RoutingTags, SacScale as OsmSacScale, Surface as OsmSurface,
-    TrailVisibility, TraversalDirection, WalkableGeometryExtract, read_walkable_geometry,
+    TrackType, TrailVisibility, TraversalDirection, WalkableGeometryExtract, WalkableHighway,
+    read_walkable_geometry,
 };
 use switchback_trailpack::{
     Bbox, Edge, Manifest, Node, OfficialRef, OfficialTrace, OfficialTrailSource, Source, Terrain,
@@ -569,6 +570,7 @@ fn build_artifact(
         .filter(|way| {
             way.geometry.iter().all(|point| within_bbox(*point, bbox))
                 && pedestrian_access_allowed(&way.way.tags)
+                && trail_routing_allowed(way)
         })
         .collect::<Vec<_>>();
     let physical_segments = physical_segments(&candidates)?;
@@ -841,6 +843,30 @@ fn pedestrian_access_allowed(tags: &RoutingTags) -> bool {
             tags.access,
             Some(Access::No | Access::Private | Access::Destination)
         ),
+    }
+}
+
+/// Keeps the production `TrailPack` on hiking-oriented ways rather than the
+/// much broader set of pedestrian-accessible urban corridors. `footway` is
+/// deliberately excluded: in the Barcelona extract it predominantly means
+/// pavements and park connectors, not trail. A `track` remains only when OSM
+/// describes it as an unpaved, non-grade-1 forestry track.
+fn trail_routing_allowed(way: &MaterializedWay) -> bool {
+    match way.way.highway {
+        WalkableHighway::Path => true,
+        WalkableHighway::Footway => false,
+        WalkableHighway::Track => {
+            !matches!(
+                way.way.tags.surface,
+                Some(
+                    OsmSurface::Paved
+                        | OsmSurface::Asphalt
+                        | OsmSurface::Concrete
+                        | OsmSurface::Metal
+                        | OsmSurface::Wood
+                )
+            ) && !matches!(way.way.tags.tracktype, Some(TrackType::Grade1))
+        }
     }
 }
 

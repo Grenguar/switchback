@@ -52,7 +52,7 @@ const positive = (value: unknown, field: string, maximum: number): number => { i
 const choice = <T extends string>(value: unknown, field: string, values: readonly T[]): T => { if (typeof value !== "string" || !values.includes(value as T)) throw new Error(`${field} must be one of: ${values.join(", ")}.`); return value as T; };
 const text = (value: unknown, field: string): string => { if (typeof value !== "string" || value.trim().length === 0 || value.length > 120) throw new Error(`${field} must be a concise string of at most 120 characters.`); return value.trim(); };
 const abortable = async <T>(signal: AbortSignal | undefined, result: T): Promise<T> => { if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError"); await Promise.resolve(); if (signal?.aborted) throw new DOMException("Request cancelled", "AbortError"); if (JSON.stringify(result).length > OUTPUT_LIMIT) throw new Error("Tool output exceeded the 1.5K character budget."); return result; };
-const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Call plan_route with the available GR-6 Horta trail access first."); return activeRoute; };
+const current = (): PlannedRoute => { if (!activeRoute) throw new Error("No route has been planned yet. Call plan_route with the available Vallvidrera trail access first."); return activeRoute; };
 const routeOutput = (route: PlannedRoute) => ({ route: route.name, start: route.start.name, distance_km: route.distanceKm, ascent_m: null, duration_hours: route.durationHours, official_match_percent: route.waymarkedPercent, source: route.source, attribution: provenance });
 const segmentOutput = (segment: PlannedRoute["segments"][number]) => ({ name: segment.name, surface: segment.surface, sac_scale: segment.sac_scale, official_match: segment.waymarked, official_match_ref: segment.official_ref });
 const xml = (value: string): string => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
@@ -78,8 +78,8 @@ const gpxFor = (route: PlannedRoute): PreparedGpx => {
 
 const rawToolContracts: ToolContract[] = [
   {
-    name: "plan_route", description: "Plan and render a directed Collserola TrailPack loop from a documented start. Use `gr6_horta_access`, the verified on-trail GR-6 Horta access coordinate; do not use the legacy Tarragona `gr65_access` start. Elevation and grade filters explicitly reject because this artifact has no elevation data.", annotations: untrusted,
-    inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: Object.keys(documentedStarts), description: "Use gr6_horta_access for the published Collserola TrailPack. Other documented starts may belong to an unavailable or legacy region." }, target_km: { type: "number", minimum: 1, maximum: 60, description: "Desired directed loop distance in kilometres; use 7.2 km for the GR-6 Horta demonstration." }, prefer_waymarked: { type: "boolean", description: "Bias toward CNIG/FEDME official-match evidence. It does not confirm present-day waymarking." }, max_ascent_m: { type: "number", description: "Unsupported: this TrailPack has no elevation values, so the request is rejected." }, max_grade: { type: "string", description: "Unsupported: this TrailPack has incomplete grade tags, so the request is rejected." } } },
+    name: "plan_route", description: "Plan and render a directed Collserola–Vallvidrera TrailPack loop from the documented trail access. Use `vallvidrera_access`, the verified on-trail PR-C-035 Cresta de Collserola coordinate. The pack excludes urban footways and paved access roads. Elevation and grade filters explicitly reject because this artifact has no elevation data.", annotations: untrusted,
+    inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: Object.keys(documentedStarts), description: "Use vallvidrera_access for the published Collserola–Vallvidrera TrailPack." }, target_km: { type: "number", minimum: 1, maximum: 60, description: "Desired directed loop distance in kilometres; use 7.2 km for the Vallvidrera demonstration." }, prefer_waymarked: { type: "boolean", description: "Bias toward CNIG/FEDME official-match evidence. It does not confirm present-day waymarking." }, max_ascent_m: { type: "number", description: "Unsupported: this TrailPack has no elevation values, so the request is rejected." }, max_grade: { type: "string", description: "Unsupported: this TrailPack has incomplete grade tags, so the request is rejected." } } },
     execute: async (input, signal) => {
       const data = object(input); only(data, ["start", "target_km", "prefer_waymarked", "max_ascent_m", "max_grade"]);
       if (data.max_ascent_m !== undefined) throw new Error("max_ascent_m is unsupported: the loaded TrailPack has no elevation values.");
@@ -157,7 +157,7 @@ const rawToolContracts: ToolContract[] = [
         edit: "No manual waypoint edit has been made in this session.",
         delta_distance_km: 0,
         delta_ascent_m: null,
-        next_step: "Use plan_route with gr6_horta_access, then drag the through-point or move it with arrow keys and press Enter.",
+        next_step: "Use plan_route with vallvidrera_access, then drag the through-point or move it with arrow keys and press Enter.",
         attribution: provenance,
       });
       return abortable(signal, {

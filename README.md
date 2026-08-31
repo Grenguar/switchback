@@ -1,10 +1,10 @@
 # Switchback
 
-Source-backed Collserola trails, made loopable at the length you have time for
+Source-backed Collserola–Vallvidrera trails, made loopable at the length you have time for
 — planned with an agent on a live map.
 
 Switchback is an entry for the OpenAI WebMCP Challenge. Its first region is
-Collserola, Barcelona: an offline pipeline produces a portable, tiled
+Collserola–Vallvidrera: an offline pipeline produces a portable, tiled
 **TrailPack** from local OSM and CNIG/FEDME inputs. A hiker and an agent share
 the same live route-planning surface: the agent calls inspectable site tools,
 and the person sees the resulting directed route on the map.
@@ -14,8 +14,8 @@ and the person sees the resulting directed route on the map.
 This repository is being built as a feasibility spike. The goal is to prove a
 small, honest end-to-end loop before expanding the product:
 
-1. Build and load a provenance-carrying TrailPack with 72 Collserola tiles.
-2. Generate a directed loop on the browser map from the verified GR-6 Horta access.
+1. Build and load a provenance-carrying TrailPack with 33 Collserola–Vallvidrera tiles.
+2. Generate a directed loop on the browser map from the verified Vallvidrera access.
 3. Expose six planning actions as browser-native WebMCP site tools.
 4. Let the person inspect, alter, and export the same route the agent planned.
 

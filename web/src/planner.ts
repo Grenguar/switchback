@@ -14,45 +14,13 @@ export type StartDefinition = {
 // GR-65.5 trace that lands on the v1 graph. The town labels remain visible so
 // the MVP does not imply they are usable starts before access links are vetted.
 export const documentedStarts = {
-  gr6_horta_access: {
-    id: "gr6_horta_access",
-    name: "GR-6 Horta trail access",
-    latitude: 41.4394290562267,
-    longitude: 2.14767392660807,
+  vallvidrera_access: {
+    id: "vallvidrera_access",
+    name: "Vallvidrera trail access",
+    latitude: 41.426059751015,
+    longitude: 2.116789968413,
     availability: "available",
-    description: "Verified on-trail access coordinate from the CNIG/FEDME GR-6 Horta–Sant Cugat source trace; not a town or a road-side proxy.",
-  },
-  gr65_access: {
-    id: "gr65_access",
-    name: "GR-65.5 trail access",
-    latitude: 41.3081880617615,
-    longitude: 0.967097645100853,
-    availability: "available",
-    description: "Verified on-trail access coordinate from the CNIG/FEDME GR-65.5 source trace; not a town or trailhead.",
-  },
-  ulldemolins: {
-    id: "ulldemolins",
-    name: "Ulldemolins",
-    latitude: 41.3223,
-    longitude: 0.8761,
-    availability: "unavailable",
-    description: "Unavailable in TrailPack v1: the town-to-trail access connector has not been vetted.",
-  },
-  prades: {
-    id: "prades",
-    name: "Prades",
-    latitude: 41.3091,
-    longitude: 0.9880,
-    availability: "unavailable",
-    description: "Unavailable in TrailPack v1: the town-to-trail access connector has not been vetted.",
-  },
-  albarca: {
-    id: "albarca",
-    name: "Albarca",
-    latitude: 41.2665,
-    longitude: 0.8998,
-    availability: "unavailable",
-    description: "Unavailable in TrailPack v1: the town-to-trail access connector has not been vetted.",
+    description: "Verified on-trail coordinate from the CNIG/FEDME PR-C-035 Cresta de Collserola source trace; not a town or a road-side proxy.",
   },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;
@@ -126,9 +94,6 @@ export class TrailPlanner {
 
   plan(startId: StartId, targetKm: number, preferWaymarked: boolean): PlannedRoute {
     const start = documentedStarts[startId];
-    if (start.availability === "unavailable") {
-      throw new Error(`${start.name} is unavailable in TrailPack v1: ${start.description}`);
-    }
     const snapped = this.nearestNode(start.latitude, start.longitude);
     if (snapped.distanceMetres > MAX_SNAP_METRES) {
       throw new Error(`${start.name} is ${Math.round(snapped.distanceMetres)} m from the nearest TrailPack node; the graph refuses to snap beyond ${MAX_SNAP_METRES} m.`);

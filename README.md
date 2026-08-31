@@ -32,8 +32,24 @@ pnpm --dir web dev
 ```
 
 Netlify builds from `web/` with `pnpm run build` and publishes `dist`. Routing
-uses only the local TrailPack graph; OpenStreetMap raster tiles are a visual
-reference layer with visible attribution, not a routing dependency.
+uses only the local TrailPack graph; the map is a visual reference layer, not a
+routing dependency.
+
+### Interactive map setup
+
+The map uses MapLibre. It automatically uses Amazon Location Maps V2 terrain
+and satellite styles when these **build** variables are set in Netlify, then
+falls back to OpenStreetMap when they are absent:
+
+```text
+VITE_AWS_LOCATION_API_KEY=<restricted public Maps V2 key>
+VITE_AWS_LOCATION_REGION=eu-west-1
+```
+
+`VITE_` values are intentionally visible to the browser. Never use AWS access
+keys here: create an Amazon Location API key restricted to `geo-maps:*`,
+`arn:aws:geo-maps:eu-west-1::provider/default`, and the production site
+referrer only. Rebuild the Netlify site after adding or rotating the key.
 
 Run the complete offline validation and evidence bundle from a Node 24 shell:
 

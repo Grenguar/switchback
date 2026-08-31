@@ -1,5 +1,6 @@
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { commitWaypointEdit, documentedStarts, getActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
+import { documentedStarts, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
 import { TrailPlanner, type PlannedRoute, type StartId } from "./planner";
 import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { TrailMap } from "./trail-map";
@@ -20,16 +21,16 @@ app.innerHTML = `
         <form id="plan-form"><fieldset class="start-picker"><legend>Start</legend><div class="start-options" role="group" aria-label="Available parking starts">${Object.values(documentedStarts).map((start, index) => `<button class="start-option" type="button" data-start="${start.id}" aria-pressed="${index === 0}"><strong>${start.name}</strong><small>${start.description}</small></button>`).join("")}</div></fieldset><fieldset class="distance-picker"><div class="distance-heading"><legend>Distance</legend><output id="distance-value">7 km</output></div><div class="distance-control"><button id="distance-down" type="button" aria-label="Reduce distance by half a kilometre">−</button><input id="distance" name="distance" type="range" min="1" max="30" step="0.5" value="7" aria-describedby="distance-help" /><button id="distance-up" type="button" aria-label="Increase distance by half a kilometre">+</button></div><p class="field-hint" id="distance-help">We only keep loops within 0.5 km of your choice.</p></fieldset><button class="plan-button" type="submit">Generate my loop <span aria-hidden="true">↗</span></button><p class="field-hint">Trail-first routing from a parking start. You can download the GPX when it looks right.</p></form>
         <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
-    <section class="map-panel" id="map-panel" aria-label="TrailPack route preview on an OpenStreetMap reference map"><canvas class="trail-map" id="trail-map" aria-hidden="true"></canvas><p class="map-description" id="map-description" role="status">Loading the TrailPack route map.</p><button class="waypoint-handle" id="waypoint-handle" type="button" disabled aria-describedby="waypoint-help waypoint-update" aria-label="Route through-point. Plan a route before moving it."><span aria-hidden="true"></span></button><p class="waypoint-help" id="waypoint-help">Drag the through-point to request a graph replan. Keyboard: use arrow keys to position it, then Enter to apply; Escape cancels.</p><p class="waypoint-update" id="waypoint-update" role="status" aria-live="polite">Plan a route to enable the through-point.</p><div class="map-key"><span><i class="network-swatch"></i>TrailPack network</span><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div><p class="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></p><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a car park</p><h2 id="route-name">Tell us what kind of walk you want</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">We only draw a loop after the trail graph finds one.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
+    <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive trail map. Drag to pan, scroll or pinch to zoom."></div><div class="map-style-toggle" role="group" aria-label="Map style"><button type="button" data-map-style="terrain" aria-pressed="true">Terrain</button><button type="button" data-map-style="satellite" aria-pressed="false">Satellite</button></div><p class="map-description" id="map-description" role="status">Loading the interactive trail map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a car park</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Pick a car park and distance, then we will draw a real trail circuit.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
     </section>
     <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Six small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>0${index + 1}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
   </main>`;
 
 const log = document.querySelector<HTMLOListElement>("#log");
-const trailMapCanvas = document.querySelector<HTMLCanvasElement>("#trail-map");
+const trailMapElement = document.querySelector<HTMLElement>("#trail-map");
 const mapDescription = document.querySelector<HTMLElement>("#map-description");
-const trailMap = trailMapCanvas && mapDescription ? new TrailMap(trailMapCanvas, mapDescription) : undefined;
+const trailMap = trailMapElement && mapDescription ? new TrailMap(trailMapElement, mapDescription) : undefined;
 let preparedGpxUrl: string | undefined;
 const clearPreparedGpx = (): void => {
   if (preparedGpxUrl) URL.revokeObjectURL(preparedGpxUrl);
@@ -88,14 +89,7 @@ function renderRoute(route: PlannedRoute): void {
   const name = document.querySelector<HTMLElement>("#route-name"); const distance = document.querySelector<HTMLElement>("#route-distance"); const duration = document.querySelector<HTMLElement>("#route-duration"); const kicker = document.querySelector<HTMLElement>("#route-kicker"); const note = document.querySelector<HTMLElement>("#route-note");
   if (state) state.textContent = "Your trail circuit"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Ready to walk"; if (note) note.textContent = `${route.waymarkedPercent}% official-match coverage. Elevation unknown; check local conditions before you go.`;
   trailMap?.setRoute(route);
-  const midpoint = route.coordinates[Math.floor(route.coordinates.length / 2)];
-  if (midpoint) setWaypointPosition(midpoint[0], midpoint[1], false);
-  const waypoint = document.querySelector<HTMLButtonElement>("#waypoint-handle");
-  const update = document.querySelector<HTMLElement>("#waypoint-update");
-  if (waypoint) { waypoint.disabled = false; waypoint.setAttribute("aria-label", "Route through-point. Drag to request a graph replan, or use arrow keys then Enter."); }
-  if (update) update.textContent = "Through-point ready. Drag it or use arrow keys, then press Enter to apply a graph replan.";
 }
-let currentManifestBbox: [number, number, number, number] = [0.86, 41.23, 0.99, 41.34];
 setRouteRenderer(renderRoute);
 
 function renderTrailPack(state: TrailPackLoadState): void {
@@ -103,7 +97,7 @@ function renderTrailPack(state: TrailPackLoadState): void {
   if (!status || !region || !sources || !mapLabel || state.status === "loading") return;
   sources.replaceChildren();
   if (state.status === "unavailable") { status.className = "data-status unavailable"; status.textContent = `TrailPack unavailable — ${state.message}`; region.textContent = "No graph loaded"; mapLabel.textContent = "Graph unavailable"; return; }
-  currentManifestBbox = state.manifest.bbox; trailMap?.setTrailPack(state.artifact); setTrailPackProvenance(`${state.manifest.region_name} TrailPack`, state.manifest.sources.map((source) => source.attribution)); setTrailPlanner(new TrailPlanner(state.artifact));
+  trailMap?.setTrailPack(state.artifact); setTrailPackProvenance(`${state.manifest.region_name} TrailPack`, state.manifest.sources.map((source) => source.attribution)); setTrailPlanner(new TrailPlanner(state.artifact));
   status.className = "data-status ready"; status.textContent = "Static directed TrailPack graph loaded."; region.textContent = state.manifest.region_name; mapLabel.textContent = "TrailPack v1 loaded";
   for (const source of state.manifest.sources) { const item = document.createElement("li"); item.textContent = `${source.attribution} · ${source.licence}`; sources.append(item); }
 }
@@ -131,6 +125,17 @@ document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input",
 document.querySelector<HTMLButtonElement>("#distance-down")?.addEventListener("click", () => setDistance(Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7) - 0.5));
 document.querySelector<HTMLButtonElement>("#distance-up")?.addEventListener("click", () => setDistance(Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7) + 0.5));
 document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.addEventListener("click", () => setStart(button.dataset.start as StartId)));
+document.querySelectorAll<HTMLButtonElement>("[data-map-style]").forEach((button) => {
+  const style = button.dataset.mapStyle as "terrain" | "satellite";
+  if (style === "satellite" && !trailMap?.supportsSatellite) {
+    button.disabled = true;
+    button.title = "Add the scoped Amazon Location key to enable satellite.";
+  }
+  button.addEventListener("click", () => {
+    trailMap?.setStyle(style);
+    document.querySelectorAll<HTMLButtonElement>("[data-map-style]").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === button)));
+  });
+});
 setPlanTargetRenderer(setDistance);
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
@@ -150,77 +155,4 @@ document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListene
 // changing a successfully registered tool set.
 window.addEventListener("focus", () => { if (bridge.status === "unavailable") void checkModelContext(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && bridge.status === "unavailable") void checkModelContext(); });
-
-type MapWaypoint = { latitude: number; longitude: number };
-let stagedWaypoint: MapWaypoint | undefined;
-let draggingWaypoint = false;
-
-const mercatorY = (latitude: number): number => {
-  const radians = Math.max(-85.05112878, Math.min(85.05112878, latitude)) * Math.PI / 180;
-  return (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2;
-};
-const latitudeFromMercatorY = (value: number): number => Math.atan(Math.sinh(Math.PI * (1 - 2 * value))) * 180 / Math.PI;
-
-const mapPointForEvent = (event: PointerEvent): MapWaypoint | undefined => {
-  const panel = document.querySelector<HTMLElement>("#map-panel");
-  if (!panel) return undefined;
-  const rect = panel.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return undefined;
-  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-  const [west, south, east, north] = currentManifestBbox;
-  return { latitude: latitudeFromMercatorY(mercatorY(north) + (y * (mercatorY(south) - mercatorY(north)))), longitude: west + (x * (east - west)) };
-};
-const setWaypointPosition = (latitude: number, longitude: number, announce: boolean): void => {
-  stagedWaypoint = { latitude, longitude };
-  const handle = document.querySelector<HTMLElement>("#waypoint-handle");
-  const update = document.querySelector<HTMLElement>("#waypoint-update");
-  const [west, south, east, north] = currentManifestBbox;
-  const left = ((longitude - west) / (east - west)) * 100;
-  const top = ((mercatorY(latitude) - mercatorY(north)) / (mercatorY(south) - mercatorY(north))) * 100;
-  if (handle) { handle.style.left = `${Math.max(0, Math.min(100, left))}%`; handle.style.top = `${Math.max(0, Math.min(100, top))}%`; }
-  if (announce && update) update.textContent = "Through-point repositioned. Press Enter to request a graph replan, or Escape to return to the active route.";
-};
-const applyWaypoint = async (): Promise<void> => {
-  const handle = document.querySelector<HTMLButtonElement>("#waypoint-handle");
-  const update = document.querySelector<HTMLElement>("#waypoint-update");
-  if (!stagedWaypoint || !handle) return;
-  handle.disabled = true;
-  if (update) update.textContent = "Checking the through-point against the directed TrailPack graph…";
-  try {
-    const result = await commitWaypointEdit(stagedWaypoint, document.querySelector<HTMLInputElement>("input[name=character]:checked")?.value === "waymarked");
-    addLog("manual_waypoint_edit", { waypoint: result.edit.waypoint }, { before: result.edit.before, after: result.edit.after, delta: result.edit.delta });
-    if (update) update.textContent = `Route updated: ${result.edit.delta.distanceKm >= 0 ? "+" : ""}${result.edit.delta.distanceKm} km; ${result.edit.delta.officialMatchPercent >= 0 ? "+" : ""}${result.edit.delta.officialMatchPercent}% official-match coverage.`;
-  } catch (error) {
-    addLog("manual_waypoint_edit", { waypoint: stagedWaypoint }, null, error);
-    const route = getActiveRoute();
-    const midpoint = route?.coordinates[Math.floor(route.coordinates.length / 2)];
-    if (midpoint) setWaypointPosition(midpoint[0], midpoint[1], false);
-    if (update) update.textContent = `No route change: ${error instanceof Error ? error.message : String(error)}`;
-  } finally { handle.disabled = false; }
-};
-const handle = document.querySelector<HTMLButtonElement>("#waypoint-handle");
-handle?.addEventListener("pointerdown", (event) => { if (handle.disabled) return; draggingWaypoint = true; handle.setPointerCapture(event.pointerId); const point = mapPointForEvent(event); if (point) setWaypointPosition(point.latitude, point.longitude, false); event.preventDefault(); });
-handle?.addEventListener("pointermove", (event) => { if (!draggingWaypoint) return; const point = mapPointForEvent(event); if (point) setWaypointPosition(point.latitude, point.longitude, false); });
-handle?.addEventListener("pointerup", (event) => { if (!draggingWaypoint) return; draggingWaypoint = false; handle.releasePointerCapture(event.pointerId); void applyWaypoint(); });
-handle?.addEventListener("keydown", (event) => {
-  if (!stagedWaypoint || handle.disabled) return;
-  const increment = event.shiftKey ? 0.001 : 0.0002;
-  const next = { ...stagedWaypoint };
-  if (event.key === "ArrowUp") next.latitude += increment;
-  else if (event.key === "ArrowDown") next.latitude -= increment;
-  else if (event.key === "ArrowLeft") next.longitude -= increment;
-  else if (event.key === "ArrowRight") next.longitude += increment;
-  else if (event.key === "Enter") { event.preventDefault(); void applyWaypoint(); return; }
-  else if (event.key === "Escape") {
-    const route = getActiveRoute();
-    const midpoint = route?.coordinates[Math.floor(route.coordinates.length / 2)];
-    if (midpoint) setWaypointPosition(midpoint[0], midpoint[1], false);
-    const active = document.querySelector<HTMLElement>("#waypoint-update");
-    if (active) active.textContent = "Through-point move cancelled. The active graph-planned route is unchanged.";
-    return;
-  }
-  else return;
-  event.preventDefault(); setWaypointPosition(next.latitude, next.longitude, true);
-});
 void checkModelContext();

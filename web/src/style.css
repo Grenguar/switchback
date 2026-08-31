@@ -83,3 +83,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .distance-control input[type=range] { min-width: 0; }
 .planner .plan-button { width: 100%; min-height: 56px; font-size: 1rem; }
 .planner form > .field-hint { margin: -12px 0 0; }
+
+/* The map is the canvas for the route, not a backdrop for controls. */
+.map-panel { display: grid; grid-template-rows: minmax(450px, 1fr) auto; overflow: hidden; }
+.map-stage { position: relative; min-height: 450px; overflow: hidden; }
+.trail-map { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: auto; }
+.maplibregl-canvas { outline: none; }
+.maplibregl-ctrl-group { overflow: hidden; border: 1px solid rgba(23, 51, 40, .35); border-radius: 4px; box-shadow: 0 2px 8px rgba(23, 51, 40, .18); }
+.maplibregl-ctrl-group button { width: 36px; height: 36px; }
+.map-style-toggle { position: absolute; z-index: 3; top: 14px; right: 14px; display: inline-flex; padding: 3px; background: rgba(244, 241, 219, .95); border: 1px solid rgba(23, 51, 40, .25); border-radius: 5px; box-shadow: 0 2px 8px rgba(23, 51, 40, .16); }
+.map-style-toggle button { min-height: 34px; padding: 6px 9px; color: #173328; background: transparent; border: 0; border-radius: 3px; font: 600 .62rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .06em; }
+.map-style-toggle button[aria-pressed=true] { background: #173328; color: #edf0e5; }
+.map-style-toggle button:disabled { color: #758276; cursor: not-allowed; }
+.map-key { z-index: 3; right: auto; bottom: 14px; left: 14px; max-width: calc(100% - 28px); padding: 7px 9px; font-size: .58rem; }
+.map-key > span:last-child { display: none; }
+.route-card { position: static; z-index: auto; width: auto; margin: 0; padding: 19px 21px 21px; border-top: 1px solid #afbdab; box-shadow: none; }
+.route-card h2 { max-width: 540px; }
+.trailhead-marker { width: 26px; height: 26px; border: 3px solid #f8f5df; border-radius: 50%; background: #427e2e; box-shadow: 0 1px 5px rgba(23, 51, 40, .55); }
+.trailhead-marker::after { content: ""; position: absolute; width: 10px; height: 10px; top: 5px; left: 5px; border-radius: 50%; background: #f8f5df; }
+@media (max-width: 760px) {
+  .map-panel { grid-template-rows: minmax(400px, 1fr) auto; }
+  .map-stage { min-height: 400px; }
+  .map-style-toggle { top: 12px; right: 12px; }
+  .map-key { bottom: 12px; left: 12px; max-width: calc(100% - 24px); }
+  .route-card { padding: 17px; }
+}

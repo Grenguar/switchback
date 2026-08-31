@@ -54,7 +54,8 @@ test("plan_route renders a directed TrailPack loop before returning", async () =
   setTrailPlanner(new TrailPlanner(artifact)); let rendered: PlannedRoute | undefined; setRouteRenderer((route) => { rendered = route; });
   const tool = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(tool);
   await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 3, prefer_waymarked: true, max_ascent_m: 900 }), /no elevation/);
-  await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 31, prefer_waymarked: true }), /no greater than 30/);
+  await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 31, prefer_waymarked: true }), /whole or half kilometre/);
+  await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 3.2, prefer_waymarked: true }), /whole or half kilometre/);
   const observed: string[] = [];
   let renderedTarget: number | undefined;
   setPlanTargetRenderer((targetKm) => { renderedTarget = targetKm; });
@@ -138,5 +139,5 @@ test("published Collserola TrailPack loads every static tile with Barcelona prov
   assert.equal(Object.keys(result.artifact.tiles).length, 33);
   const planner = new TrailPlanner(result.artifact);
   const circuit = planner.plan("font_groga_parking", 7, true);
-  assert.ok(Math.abs(circuit.distanceKm - 7) <= 7 * 0.15, `expected a circuit close to 7 km, received ${circuit.distanceKm} km`);
+  assert.ok(Math.abs(circuit.distanceKm - 7) <= 0.5, `expected a circuit within ±0.5 km of 7 km, received ${circuit.distanceKm} km`);
 });

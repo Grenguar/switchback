@@ -10,14 +10,6 @@ export type StartDefinition = {
 };
 
 export const documentedStarts = {
-  font_groga_parking: {
-    id: "font_groga_parking",
-    name: "Font Groga car park",
-    latitude: 41.427793,
-    longitude: 2.1176235,
-    availability: "available",
-    description: "Car-access trailhead at Mirador de la Font Groga, verified 29 m from the Collserola trail graph.",
-  },
   vista_rica_parking: {
     id: "vista_rica_parking",
     name: "Vista Rica car park",
@@ -26,13 +18,13 @@ export const documentedStarts = {
     availability: "available",
     description: "Car-access trailhead at the Vista Rica parking area on the Arrabassada road, verified 14 m from the Collserola trail graph.",
   },
-  vallvidrera_crest_access: {
-    id: "vallvidrera_crest_access",
-    name: "Cresta de Collserola access",
-    latitude: 41.426059751015,
-    longitude: 2.116789968413,
+  passeig_aigues_parking: {
+    id: "passeig_aigues_parking",
+    name: "Passeig de les Aigües parking",
+    latitude: 41.41934275457755,
+    longitude: 2.1276451494056836,
     availability: "available",
-    description: "On-trail access coordinate from the CNIG/FEDME PR-C-035 Cresta de Collserola source trace.",
+    description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph. The current trail-only graph supports short loops here.",
   },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;

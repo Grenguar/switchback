@@ -15,7 +15,7 @@ This repository is being built as a feasibility spike. The goal is to prove a
 small, honest end-to-end loop before expanding the product:
 
 1. Build and load a provenance-carrying TrailPack with 33 Collserola–Vallvidrera tiles.
-2. Generate a directed loop from a verified trailhead: Font Groga or Vista Rica car park, or Cresta de Collserola access.
+2. Generate a directed loop from a verified parking start: Vista Rica or Passeig de les Aigües.
 3. Expose six planning actions as browser-native WebMCP site tools.
 4. Let the person inspect, alter, and export the same route the agent planned.
 

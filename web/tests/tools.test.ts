@@ -27,7 +27,7 @@ test("all six tool contracts are present and have strict object schemas", () => 
 test("avoid_segment replans without the physical segment and GPX preserves the full trace", async () => {
   setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
   const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
-  await plan.execute({ start: "font_groga_parking", target_km: 3, prefer_waymarked: true });
+  await plan.execute({ start: "vista_rica_parking", target_km: 3, prefer_waymarked: true });
   const avoid = toolContracts.find((candidate) => candidate.name === "avoid_segment"); assert.ok(avoid);
   const result = await avoid.execute({ segment_name: "a" }) as { avoided: boolean; segment_name: string; delta_distance_km: number };
   assert.equal(result.avoided, true); assert.equal(result.segment_name, "a"); assert.equal(result.delta_distance_km, 0);
@@ -53,14 +53,14 @@ test("avoid_segment replans without the physical segment and GPX preserves the f
 test("plan_route renders a directed TrailPack loop before returning", async () => {
   setTrailPlanner(new TrailPlanner(artifact)); let rendered: PlannedRoute | undefined; setRouteRenderer((route) => { rendered = route; });
   const tool = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(tool);
-  await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 3, prefer_waymarked: true, max_ascent_m: 900 }), /no elevation/);
-  await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 31, prefer_waymarked: true }), /whole or half kilometre/);
-  await assert.rejects(() => tool.execute({ start: "font_groga_parking", target_km: 3.2, prefer_waymarked: true }), /whole or half kilometre/);
+  await assert.rejects(() => tool.execute({ start: "vista_rica_parking", target_km: 3, prefer_waymarked: true, max_ascent_m: 900 }), /no elevation/);
+  await assert.rejects(() => tool.execute({ start: "vista_rica_parking", target_km: 31, prefer_waymarked: true }), /whole or half kilometre/);
+  await assert.rejects(() => tool.execute({ start: "vista_rica_parking", target_km: 3.2, prefer_waymarked: true }), /whole or half kilometre/);
   const observed: string[] = [];
   let renderedTarget: number | undefined;
   setPlanTargetRenderer((targetKm) => { renderedTarget = targetKm; });
   setToolInvocationObserver((name) => observed.push(name));
-  const result = await tool.execute({ start: "font_groga_parking", target_km: 3, prefer_waymarked: true }) as { rendered: boolean; distance_km: number; official_match_percent: number };
+  const result = await tool.execute({ start: "vista_rica_parking", target_km: 3, prefer_waymarked: true }) as { rendered: boolean; distance_km: number; official_match_percent: number };
   assert.equal(result.rendered, true); assert.equal(result.distance_km, 2.8); assert.equal(result.official_match_percent, 36); assert.equal("waymarked_percent" in result, false); assert.ok(rendered); assert.deepEqual(observed, ["plan_route"]); assert.ok(JSON.stringify(result).length <= 1_500);
   assert.equal(renderedTarget, 3);
   const summary = toolContracts.find((candidate) => candidate.name === "get_route_summary"); assert.ok(summary);
@@ -138,6 +138,8 @@ test("published Collserola TrailPack loads every static tile with Barcelona prov
   assert.equal(result.manifest.sources[0]?.id, "osm-barcelona-bbbike");
   assert.equal(Object.keys(result.artifact.tiles).length, 33);
   const planner = new TrailPlanner(result.artifact);
-  const circuit = planner.plan("font_groga_parking", 7, true);
-  assert.ok(Math.abs(circuit.distanceKm - 7) <= 0.5, `expected a circuit within ±0.5 km of 7 km, received ${circuit.distanceKm} km`);
+  const vistaRicaCircuit = planner.plan("vista_rica_parking", 7, true);
+  assert.ok(Math.abs(vistaRicaCircuit.distanceKm - 7) <= 0.5, `expected a circuit within ±0.5 km of 7 km, received ${vistaRicaCircuit.distanceKm} km`);
+  const passeigAiguesCircuit = planner.plan("passeig_aigues_parking", 3, true);
+  assert.ok(Math.abs(passeigAiguesCircuit.distanceKm - 3) <= 0.5, `expected a circuit within ±0.5 km of 3 km, received ${passeigAiguesCircuit.distanceKm} km`);
 });

@@ -16,7 +16,7 @@ const edge = (id: string, physical_id: string, from: number, to: number, officia
 });
 const artifact: TrailPackArtifact = {
   manifest,
-  tiles: { demo: { nodes: [point(41.427793, 2.1176235), point(41.428, 2.121), point(41.4265, 2.124), point(41.425, 2.118)], edges: [
+  tiles: { demo: { nodes: [point(41.431472, 2.126), point(41.432, 2.129), point(41.4305, 2.132), point(41.429, 2.1265)], edges: [
     edge("a+", "a", 0, 1, true), edge("b+", "b", 1, 2, true), edge("c+", "c", 2, 0, false),
     edge("d+", "d", 0, 3, false), edge("e+", "e", 3, 0, false),
   ] } },
@@ -24,8 +24,8 @@ const artifact: TrailPackArtifact = {
 
 test("replanViaWaypoint returns a bounded directed non-retracing loop", () => {
   const planner = new TrailPlanner(artifact);
-  const original = planner.plan("font_groga_parking", 3, true);
-  const replanned = planner.replanViaWaypoint(original, { latitude: 41.425, longitude: 2.118 }, true);
+  const original = planner.plan("vista_rica_parking", 3, true);
+  const replanned = planner.replanViaWaypoint(original, { latitude: 41.429, longitude: 2.1265 }, true);
 
   assert.equal(replanned.distanceKm, 2);
   assert.equal(replanned.waymarkedPercent, 0);
@@ -36,10 +36,10 @@ test("replanViaWaypoint returns a bounded directed non-retracing loop", () => {
 
 test("RouteSession commits waypoint route and measured deltas atomically", () => {
   const planner = new TrailPlanner(artifact);
-  const initial = planner.plan("font_groga_parking", 3, true);
+  const initial = planner.plan("vista_rica_parking", 3, true);
   const session = new RouteSession(initial, 3);
 
-  const edit = session.commitWaypoint(planner, { latitude: 41.425, longitude: 2.118 }, true);
+  const edit = session.commitWaypoint(planner, { latitude: 41.429, longitude: 2.1265 }, true);
   assert.equal(session.route.distanceKm, 2);
   assert.equal(edit.before.distanceKm, 3);
   assert.equal(edit.after.distanceKm, 2);

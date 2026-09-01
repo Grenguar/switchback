@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, selectableCircuitStartIds, documentedStarts, type PlannedRoute } from "../src/planner";
-import { clearActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
+import { clearActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteBriefingRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, setTrailWeatherRenderer, toolContracts, type PreparedGpx, type PreparedRouteBriefing } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -19,9 +19,47 @@ const artifact: TrailPackArtifact = {
   ] } },
 };
 
-test("all ten tool contracts are present and have strict object schemas", () => {
-  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "describe_last_edit"]);
+test("all twelve tool contracts are present and have strict object schemas", () => {
+  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "get_trail_weather", "prepare_route_briefing", "describe_last_edit"]);
   for (const tool of toolContracts) { assert.equal(tool.inputSchema.type, "object"); assert.equal(tool.inputSchema.additionalProperties, false); assert.equal(tool.annotations.untrustedContentHint, true); }
+});
+
+test("get_trail_weather compares three local days and adds limited forecast context to the briefing", async () => {
+  const originalFetch = globalThis.fetch;
+  const times = ["2026-09-01", "2026-09-02", "2026-09-03"].flatMap((date) => Array.from({ length: 9 }, (_, index) => `${date}T${String(index + 8).padStart(2, "0")}:00`));
+  globalThis.fetch = async () => new Response(JSON.stringify({ timezone: "Europe/Madrid", hourly: {
+    time: times, temperature_2m: times.map(() => 20), precipitation_probability: times.map((_, index) => index < 3 ? 5 : 35), precipitation: times.map((_, index) => index < 3 ? 0 : 0.3), weather_code: times.map((_, index) => index < 3 ? 0 : 61), wind_speed_10m: times.map(() => 7), wind_gusts_10m: times.map(() => 15),
+  } }), { status: 200 });
+  try {
+    setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
+    const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
+    await plan.execute({ start: "vista_rica_parking", target_km: 7, prefer_waymarked: true });
+    let renderedWeather = false;
+    setTrailWeatherRenderer(() => { renderedWeather = true; });
+    const weather = toolContracts.find((candidate) => candidate.name === "get_trail_weather"); assert.ok(weather);
+    const forecast = await weather.execute({}) as { forecast_ready: boolean; next_3_days: Array<{ date: string }>; best_forecast_window: { time: string } };
+    assert.equal(forecast.forecast_ready, true); assert.deepEqual(forecast.next_3_days.map((day) => day.date), ["2026-09-01", "2026-09-02", "2026-09-03"]); assert.equal(forecast.best_forecast_window.time, "08:00–11:00"); assert.equal(renderedWeather, true);
+    const briefingTool = toolContracts.find((candidate) => candidate.name === "prepare_route_briefing"); assert.ok(briefingTool);
+    const briefing = await briefingTool.execute({}) as { briefing: string; forecast_included: boolean; next_step: string };
+    assert.equal(briefing.forecast_included, true); assert.match(briefing.briefing, /least-exposed forecast window/); assert.match(briefing.next_step, /chat response/); assert.ok(JSON.stringify(forecast).length <= 1_500);
+  } finally {
+    globalThis.fetch = originalFetch;
+    setTrailWeatherRenderer(undefined);
+  }
+});
+
+test("prepare_route_briefing returns a copyable, reviewable human handoff", async () => {
+  setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
+  const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
+  await plan.execute({ start: "vista_rica_parking", target_km: 7, prefer_waymarked: true });
+  let rendered: PreparedRouteBriefing | undefined;
+  setRouteBriefingRenderer((briefing) => { rendered = briefing; });
+  const briefingTool = toolContracts.find((candidate) => candidate.name === "prepare_route_briefing"); assert.ok(briefingTool);
+  const result = await briefingTool.execute({}) as { briefing_ready: boolean; briefing: string; next_step: string };
+  assert.ok(rendered); assert.match(rendered.text, /Vista Rica car park/); assert.match(rendered.text, /Check local conditions/);
+  assert.equal(result.briefing_ready, true); assert.equal(result.briefing, rendered.text); assert.match(result.next_step, /no message was sent/);
+  assert.ok(JSON.stringify(result).length <= 1_500);
+  setRouteBriefingRenderer(undefined);
 });
 
 test("avoid_segment replans without the physical segment and GPX preserves the full trace", async () => {

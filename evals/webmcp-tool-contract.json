@@ -11,6 +11,8 @@
     "explain_segment",
     "avoid_segment",
     "prepare_gpx",
+    "get_trail_weather",
+    "prepare_route_briefing",
     "describe_last_edit"
   ],
   "required_contract_properties": {
@@ -22,6 +24,8 @@
     "registration": "Every active tool is offered to the browser model context.",
     "routing": "validate_circuit dry-runs a directed loop and plan_route renders it before returning.",
     "agent_worklog": "record_session_note leaves a visible, local-to-tab record of agent test and handoff work.",
+    "route_briefing": "prepare_route_briefing returns an agent-readable handoff and reveals the same reviewable text with a human-controlled copy action.",
+    "trail_weather": "get_trail_weather compares three local forecast days, presents an explicit uncertainty caveat, and may be included in the route briefing.",
     "limitations": "Unsupported elevation and grade constraints must be rejected rather than estimated."
   }
 }

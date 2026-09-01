@@ -19,7 +19,7 @@ The result is inspectable: a person can see the selected trailhead, rendered lin
 
 ## What an agent can do
 
-The app registers ten browser-native WebMCP tools:
+The app registers twelve browser-native WebMCP tools:
 
 1. List graph-verified circuit choices.
 2. Dry-run a circuit before altering the map.
@@ -30,7 +30,9 @@ The app registers ten browser-native WebMCP tools:
 7. Explain a TrailPack segment.
 8. Avoid a segment and replan without silently changing a failed route.
 9. Prepare a full-resolution GPX handoff.
-10. Describe the last accepted map edit.
+10. Compare the next three local forecast days and identify a limited, least-exposed daytime window.
+11. Prepare a reviewable, copyable briefing for a family or group chat (with the forecast when checked).
+12. Describe the last accepted map edit.
 
 For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. The agent must explicitly choose to call tools; the app shows whether a browser model context is connected.
 

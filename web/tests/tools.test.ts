@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { TrailPlanner, type PlannedRoute } from "../src/planner";
+import { TrailPlanner, selectableCircuitStartIds, documentedStarts, type PlannedRoute } from "../src/planner";
 import { clearActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
@@ -156,4 +156,23 @@ test("published Collserola TrailPack loads every static tile with official A-E p
   const sharedFraction = (physicalIds.length - new Set(physicalIds).size) / physicalIds.length;
   assert.ok(sharedFraction <= 0.30, `expected at most 30% shared access, received ${sharedFraction}`);
   assert.throws(() => planner.plan("passeig_aigues_parking", 3, true), /No non-retracing circuit/, "the planner must reject a long retracing route rather than call it a loop");
+});
+
+test("every selectable car or public-transport origin has a verified closed circuit at its suggested distance", async () => {
+  const publishedManifest = await readFile(new URL("../public/trailpack/manifest.json", import.meta.url), "utf8");
+  const fetcher: typeof fetch = async (input) => {
+    const path = String(input);
+    if (path.endsWith("manifest.json")) return new Response(publishedManifest, { headers: { "content-type": "application/json" } });
+    const id = path.match(/\/tiles\/([^/]+)\.json$/)?.[1];
+    if (!id) return new Response("not found", { status: 404 });
+    return new Response(await readFile(new URL(`../public/trailpack/tiles/${id}.json`, import.meta.url), "utf8"), { headers: { "content-type": "application/json" } });
+  };
+  const loaded = await loadTrailPack(fetcher);
+  if (loaded.status !== "ready") throw new Error("Published TrailPack did not load.");
+  const planner = new TrailPlanner(loaded.artifact);
+  for (const id of selectableCircuitStartIds) {
+    const route = planner.plan(id, documentedStarts[id].recommendedKm, true);
+    assert.deepEqual(route.coordinates[0], route.coordinates.at(-1), `${id} must return to its graph start`);
+    assert.ok(Math.abs(route.distanceKm - documentedStarts[id].recommendedKm) <= 0.5, `${id} must remain within the requested 0.5 km window`);
+  }
 });

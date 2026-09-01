@@ -32,7 +32,9 @@ export const documentedStarts = {
     availability: "available",
     transportMode: "car",
     circuitStatus: "verified",
-    recommendedKm: 3.5,
+    // Under the strict non-retracing threshold this nearby start has a
+    // dependable short circuit, not a credible 3.5 km one.
+    recommendedKm: 2,
     description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph.",
   },
   centre_informacio_vallvidrera: { id: "centre_informacio_vallvidrera", name: "Centre d'Informació / Santa Maria de Vallvidrera", latitude: 41.41952, longitude: 2.10121, availability: "available", transportMode: "car", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "Free parking beside the church at the park’s main hub, with maps and a bar." },
@@ -49,8 +51,12 @@ export const documentedStarts = {
   mirador_xiprers: { id: "mirador_xiprers", name: "Mirador dels Xiprers", latitude: 41.38992, longitude: 2.10010, availability: "available", transportMode: "public_transport", circuitStatus: "verified", recommendedKm: 7, description: "Bus 22 or Av. Tibidabo access for the Carretera de les Aigües balcony route." },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;
+/** Origins which the current graph has actually proved can form a circuit. */
+export const selectableCircuitStartIds = Object.entries(documentedStarts)
+  .filter(([, start]) => start.circuitStatus === "verified")
+  .map(([id]) => id as StartId) as readonly StartId[];
 export type PlannedSegment = { name: string; surface: string | null; sac_scale: string | null; waymarked: boolean; official_ref: string | null };
-export type PlannedRoute = { id: string; name: string; start: (typeof documentedStarts)[StartId]; distanceKm: number; durationHours: number; waymarkedPercent: number; sharedAccessPercent: number; coordinates: Array<[number, number]>; segments: PlannedSegment[]; edgeIds: string[]; source: string };
+export type PlannedRoute = { id: string; name: string; start: (typeof documentedStarts)[StartId]; distanceKm: number; durationHours: number; waymarkedPercent: number; sharedAccessPercent: number; ascentM: number | null; coordinates: Array<[number, number]>; segments: PlannedSegment[]; edgeIds: string[]; source: string };
 /** A user-selected coordinate that must resolve to a nearby TrailPack node. */
 export type Waypoint = { latitude: number; longitude: number };
 export type PlannerProbe = { latitude: number; longitude: number; targetKm: number; preferWaymarked: boolean };
@@ -324,6 +330,7 @@ export class TrailPlanner {
       durationHours: Math.round((distanceMetres / 4_000) * 10) / 10,
       waymarkedPercent: Math.round((waymarkedMetres / distanceMetres) * 100),
       sharedAccessPercent,
+      ascentM: null,
       coordinates,
       segments,
       edgeIds: loopEdges.map((edge) => edge.id),

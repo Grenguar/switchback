@@ -15,6 +15,11 @@ type StartFeature = {
   geometry: { type: "Point"; coordinates: [number, number] };
 };
 
+type StartCollection = {
+  type: "FeatureCollection";
+  features: Array<{ type: "Feature"; properties: { id: string; name: string; selected: boolean }; geometry: { type: "Point"; coordinates: [number, number] } }>;
+};
+
 type OfficialNetwork = {
   type: "FeatureCollection";
   features: Array<{ type: "Feature"; properties: { code: string; name: string; source: string }; geometry: { type: "LineString"; coordinates: Array<[number, number]> } }>;
@@ -32,6 +37,11 @@ const startFeature = (start: Pick<StartDefinition, "latitude" | "longitude">): S
   geometry: { type: "Point", coordinates: [start.longitude, start.latitude] },
 });
 
+const startCollection = (starts: readonly StartDefinition[], selected?: StartDefinition): StartCollection => ({
+  type: "FeatureCollection",
+  features: starts.map((start) => ({ type: "Feature", properties: { id: start.id, name: start.name, selected: start.id === selected?.id }, geometry: { type: "Point", coordinates: [start.longitude, start.latitude] } })),
+});
+
 // Keep discovery in the intended running area. The graph may contain nearby
 // Barcelona connections, but this map is for Collserola–Vallvidrera outings.
 const COLLSEROLA_BOUNDS: [[number, number], [number, number]] = [[2.075, 41.395], [2.17, 41.46]];
@@ -41,11 +51,13 @@ export class TrailMap {
   private artifact: TrailPackArtifact | undefined;
   private route: PlannedRoute | undefined;
   private selectedStart: StartDefinition | undefined;
+  private selectableStarts: readonly StartDefinition[] = [];
+  private selectableStart: StartDefinition | undefined;
   private officialNetwork: OfficialNetwork | undefined;
   private loaded = false;
   private readonly map: MapLibreMap;
 
-  constructor(container: HTMLElement, private readonly status: HTMLElement) {
+  constructor(container: HTMLElement, private readonly status: HTMLElement, private readonly onStartSelect?: (startId: string) => void) {
     this.map = new MapLibreMap({
       container,
       style: mapConfiguration.style,
@@ -98,6 +110,25 @@ export class TrailMap {
     this.map.flyTo({ center: [start.longitude, start.latitude], zoom: 14.1, duration: 420, essential: true });
   }
 
+  /** Show only origins that can make the promised circuit for this arrival mode. */
+  setSelectableStarts(starts: readonly StartDefinition[], selected?: StartDefinition): void {
+    this.selectableStarts = starts;
+    this.selectableStart = selected;
+    if (!this.loaded) return;
+    const data = startCollection(this.selectableStarts, this.selectableStart);
+    const existing = this.map.getSource("switchback-selectable-starts") as GeoJSONSource | undefined;
+    if (existing) { existing.setData(data); return; }
+    this.map.addSource("switchback-selectable-starts", { type: "geojson", data });
+    this.map.addLayer({ id: "switchback-selectable-starts-casing", type: "circle", source: "switchback-selectable-starts", paint: { "circle-radius": ["case", ["get", "selected"], 11, 8], "circle-color": "#f8f5df", "circle-stroke-color": "#173328", "circle-stroke-width": 2 } });
+    this.map.addLayer({ id: "switchback-selectable-starts", type: "circle", source: "switchback-selectable-starts", paint: { "circle-radius": ["case", ["get", "selected"], 7, 5], "circle-color": ["case", ["get", "selected"], "#427e2e", "#dce9a0"], "circle-stroke-color": "#173328", "circle-stroke-width": 1.5 } });
+    this.map.on("mouseenter", "switchback-selectable-starts", () => { this.map.getCanvas().style.cursor = "pointer"; });
+    this.map.on("mouseleave", "switchback-selectable-starts", () => { this.map.getCanvas().style.cursor = "grab"; });
+    this.map.on("click", "switchback-selectable-starts", (event) => {
+      const id = event.features?.[0]?.properties?.id;
+      if (typeof id === "string") this.onStartSelect?.(id);
+    });
+  }
+
   clearRoute(): void {
     this.route = undefined;
     if (!this.loaded) return;
@@ -119,6 +150,7 @@ export class TrailMap {
 
   private sync(): void {
     this.renderStatus();
+    this.setSelectableStarts(this.selectableStarts, this.selectableStart);
     if (!this.route) {
       this.hideRoute();
       if (this.selectedStart) this.placeStartMarker(this.selectedStart);

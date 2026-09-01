@@ -84,10 +84,10 @@ Useful supporting material:
 - [x] WebMCP registration and visible agent-tool worklog
 - [x] End-to-end route generation and user-click GPX handoff
 - [x] Open-source license file
-- [ ] Public GitHub repository — currently private; change visibility before submission
+- [x] Public GitHub repository
 - [ ] Public, audible demo video under three minutes
 - [ ] Devpost submission completed (not merely saved as a draft)
-- [ ] Teammates invited and accepted, if applicable
+- [x] Solo submission — no teammates to invite
 
 ## License
 

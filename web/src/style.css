@@ -109,6 +109,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .park-alerts li { padding: 9px; background: #fff5de; border-left: 3px solid #d49a53; }
 .park-alerts a { display: block; color: #613613; font: 600 .66rem/1.4 'DM Mono', monospace; }
 .park-alerts span, .park-alerts p { display: block; margin: 4px 0 0; color: #6e5738; font-size: .62rem; line-height: 1.45; }
+.park-alert-translation { margin-top: 9px; padding-top: 8px; border-top: 1px dashed #d8bb86; }
+.park-alert-translation strong { display: block; color: #80511e; font: 600 .56rem/1.4 'DM Mono', monospace; letter-spacing: .07em; text-transform: uppercase; }
+.park-alert-translation p { color: #4e624e; }
+.park-alert-translation p:nth-of-type(1) { font-weight: 600; }
 .park-alerts .park-alerts-source { display: inline-flex; min-height: 32px; align-items: center; margin-top: 9px; color: #613613; font-size: .61rem; text-transform: uppercase; letter-spacing: .06em; }
 .park-alerts-status { margin: 9px 0 0; color: #6e5738; font: .61rem/1.45 'DM Mono', monospace; }
 .route-weather { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }

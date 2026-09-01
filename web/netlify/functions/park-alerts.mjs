@@ -1,5 +1,8 @@
+import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
+
 const SOURCE_URL = "https://parcnaturalcollserola.cat/actualitat/avisos/";
 const CACHE_CONTROL = "public, max-age=300, s-maxage=900, stale-while-revalidate=3600";
+const MAX_TRANSLATE_BYTES = 10_000;
 
 const decode = (value) => value
   .replace(/<[^>]*>/g, " ")
@@ -24,6 +27,34 @@ export const parseActiveAlerts = (html) => {
   return alerts.filter((alert, index, all) => all.findIndex((candidate) => candidate.url === alert.url) === index).slice(0, 8);
 };
 
+const translator = () => {
+  const region = process.env.SWITCHBACK_TRANSLATE_REGION;
+  const accessKeyId = process.env.SWITCHBACK_TRANSLATE_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.SWITCHBACK_TRANSLATE_SECRET_ACCESS_KEY;
+  if (!region || !accessKeyId || !secretAccessKey) return undefined;
+  return new TranslateClient({ region, credentials: { accessKeyId, secretAccessKey } });
+};
+
+const translateText = async (client, text) => {
+  if (new TextEncoder().encode(text).byteLength > MAX_TRANSLATE_BYTES) throw new Error("The Park alert text exceeds the translation limit.");
+  const response = await client.send(new TranslateTextCommand({ SourceLanguageCode: "ca", TargetLanguageCode: "en", Text: text }));
+  if (!response.TranslatedText) throw new Error("AWS Translate returned no text.");
+  return response.TranslatedText;
+};
+
+/** Keeps the official Catalan notice available when an optional translation cannot be produced. */
+export const translateActiveAlerts = async (alerts, client = translator()) => {
+  if (!client) return alerts.map((alert) => ({ ...alert, translation: null }));
+  return Promise.all(alerts.map(async (alert) => {
+    try {
+      const [title, excerpt] = await Promise.all([translateText(client, alert.title), translateText(client, alert.excerpt)]);
+      return { ...alert, translation: { language: "en", provider: "AWS Translate", title, excerpt } };
+    } catch {
+      return { ...alert, translation: null };
+    }
+  }));
+};
+
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { "content-type": "application/json; charset=utf-8", "cache-control": CACHE_CONTROL },
@@ -40,11 +71,17 @@ export default async (request) => {
       signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) throw new Error(`The Park returned HTTP ${response.status}.`);
-    const alerts = parseActiveAlerts(await response.text());
-    return json({ source_url: SOURCE_URL, fetched_at: new Date().toISOString(), alerts, caution: "These are Park-published notices. Publication in the active list does not by itself prove that a notice applies to this exact route or remains in force; open the source before departure." });
+    const alerts = await translateActiveAlerts(parseActiveAlerts(await response.text()));
+    return json({ source_url: SOURCE_URL, fetched_at: new Date().toISOString(), alerts, caution: "These are Park-published notices. English text is a machine translation; use the Catalan original and source link for any safety decision. Publication in the active list does not by itself prove that a notice applies to this exact route or remains in force; open the source before departure." });
   } catch (error) {
     return json({ source_url: SOURCE_URL, alerts: null, caution: "Park alerts could not be checked. Open the official alert page before departure.", error: error instanceof Error ? error.message : "Unknown alert fetch error." }, 502);
   }
 };
 
-export const config = { path: "/api/park-alerts", method: ["GET"] };
+export const config = {
+  path: "/api/park-alerts",
+  method: ["GET"],
+  // Protects the Park fetch and the optional AWS Translate calls from one
+  // client repeatedly bypassing the CDN response cache.
+  rateLimit: { action: "rate_limit", aggregateBy: ["ip"], windowSize: 60, windowLimit: 20 },
+};

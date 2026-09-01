@@ -66,6 +66,25 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .prepare-gpx { width: 100%; min-height: 44px; margin-top: 16px; padding: 10px 12px; color: #edf0e5; background: #173328; border: 1px solid #173328; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
 .prepare-gpx:hover { background: #315c48; border-color: #315c48; }
 .prepare-gpx:disabled { cursor: wait; opacity: .7; }
+.prepare-briefing { width: 100%; min-height: 44px; margin-top: 8px; padding: 10px 12px; color: #173328; background: transparent; border: 1px solid #607a6d; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
+.prepare-briefing:hover { color: #edf0e5; background: #173328; border-color: #173328; }
+.prepare-briefing:disabled { cursor: wait; opacity: .7; }
+.check-weather { width: 100%; min-height: 44px; margin-top: 8px; padding: 10px 12px; color: #173328; background: #dce9a0; border: 1px solid #dce9a0; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
+.check-weather:hover { background: #c4d87f; border-color: #c4d87f; }
+.check-weather:disabled { cursor: wait; opacity: .7; }
+.route-weather { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
+.route-weather .eyebrow { margin-bottom: 8px; }
+.route-weather > p:not(.eyebrow), .route-weather li { color: #315445; font: .62rem/1.5 'DM Mono', monospace; }
+.route-weather > p:not(.eyebrow) { margin: 0; font-weight: 600; }
+.route-weather ul { display: grid; gap: 5px; margin: 10px 0; padding: 0; list-style: none; }
+.route-weather li { padding-left: 8px; border-left: 2px solid #b7cf5c; }
+.route-weather .weather-status { color: #49655a; font-weight: 400; }
+.route-briefing { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
+.route-briefing .eyebrow { margin-bottom: 8px; }
+.route-briefing pre { max-height: 184px; margin: 0; overflow: auto; padding: 10px; color: #315445; background: #f7f8f2; border: 1px solid #afbdab; border-left: 3px solid #b7cf5c; white-space: pre-wrap; font: .64rem/1.5 'DM Mono', monospace; }
+.copy-briefing { width: 100%; min-height: 44px; margin-top: 9px; padding: 10px 12px; color: #edf0e5; background: #315c48; border: 1px solid #315c48; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
+.copy-briefing:hover { background: #173328; border-color: #173328; }
+.briefing-status { min-height: 1.5em; margin: 8px 0 0; color: #49655a; font: .61rem/1.45 'DM Mono', monospace; }
 .route-card .gpx-export + .change-start { margin-top: 12px; }
 @media (max-width: 760px) { .planner { padding: 24px 20px 28px; }.planner form { gap: 24px; }.circuit-options { grid-template-columns: 1fr; }.circuit-option { min-height: 62px; grid-template-columns: 1fr auto; align-items: center; }.circuit-option span { text-align: right; }.evidence { margin-top: 28px; } }
 

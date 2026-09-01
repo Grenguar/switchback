@@ -1,6 +1,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { clearActiveRoute, documentedStarts, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
+import { clearActiveRoute, documentedStarts, setGpxRenderer, setPlanTargetRenderer, setRouteBriefingRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, setTrailWeatherRenderer, toolContracts, type PreparedGpx, type PreparedRouteBriefing } from "./tools";
+import type { TrailWeather, WeatherWindow } from "./weather";
 import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, type PlannedRoute, type StartId } from "./planner";
 import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { TrailMap } from "./trail-map";
@@ -23,7 +24,7 @@ app.innerHTML = `
         <form id="plan-form"><fieldset class="arrival-picker"><legend>Getting there</legend><div class="transport-options" role="group" aria-label="Arrival mode"><button class="transport-option" type="button" data-transport="car" aria-pressed="true">By car</button><button class="transport-option" type="button" data-transport="public_transport" aria-pressed="false">Public transport</button></div></fieldset><fieldset class="start-picker"><legend>Choose a start</legend><div class="start-options" role="group" aria-label="Verified circuit starts">${Object.values(documentedStarts).filter((start) => start.circuitStatus === "verified").map((start, index) => `<button class="start-option" type="button" data-start="${start.id}" data-transport="${start.transportMode}" aria-pressed="${index === 0}"><strong>${start.name}</strong><small>${start.description}</small></button>`).join("")}</div><p class="field-hint">Only starts with a graph-verified return circuit are shown.</p></fieldset><fieldset class="distance-picker"><div class="distance-heading"><legend>Choose a loop</legend><span class="distance-unit">verified profiles</span></div><input id="distance" name="distance" type="hidden" value="7" /><div class="circuit-options" id="circuit-options" role="group" aria-describedby="distance-help"></div><p class="field-hint" id="distance-help">Distance profiles describe outing length, not terrain difficulty.</p></fieldset><button class="plan-button" type="submit">Generate my loop <span aria-hidden="true">↗</span></button><p class="field-hint">Trail-first circuit planning. Prepare the GPX after the loop looks right.</p></form>
         <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
-    <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive terrain map. Drag to explore; use the zoom controls, scroll wheel, keyboard, or pinch to zoom. Click a start marker to select it, or click an official marked path to identify it."></div><p class="map-description" id="map-description" role="status">Loading the interactive terrain map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">Choose a start</span></span><span class="official-network-key"><i class="network-swatch"></i>Official marked paths A–E</span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a start</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">—</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Choose a start and a verified loop length, then generate a real trail circuit.</p><button class="prepare-gpx" id="prepare-gpx" type="button" hidden>Prepare GPX download <span aria-hidden="true">↓</span></button><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section><button class="change-start" id="change-start" type="button">Plan another route</button></article></section>
+    <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive terrain map. Drag to explore; use the zoom controls, scroll wheel, keyboard, or pinch to zoom. Click a start marker to select it, or click an official marked path to identify it."></div><p class="map-description" id="map-description" role="status">Loading the interactive terrain map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">Choose a start</span></span><span class="official-network-key"><i class="network-swatch"></i>Official marked paths A–E</span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a start</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">—</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Choose a start and a verified loop length, then generate a real trail circuit.</p><button class="prepare-gpx" id="prepare-gpx" type="button" hidden>Prepare GPX download <span aria-hidden="true">↓</span></button><button class="check-weather" id="check-weather" type="button" hidden>Check next 3 days <span aria-hidden="true">↗</span></button><button class="prepare-briefing" id="prepare-briefing" type="button" hidden>Prepare family briefing <span aria-hidden="true">↗</span></button><section class="route-weather" id="route-weather" hidden aria-labelledby="weather-title"><p class="eyebrow" id="weather-title">Forecast planning context</p><p id="weather-best"></p><ul id="weather-days"></ul><p class="weather-status" id="weather-status" role="status" aria-live="polite"></p></section><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section><section class="route-briefing" id="route-briefing" hidden aria-labelledby="briefing-title"><p class="eyebrow" id="briefing-title">Share with your group</p><pre id="route-briefing-text"></pre><button class="copy-briefing" id="copy-briefing" type="button">Copy briefing</button><p class="briefing-status" id="briefing-status" role="status" aria-live="polite"></p></section><button class="change-start" id="change-start" type="button">Plan another route</button></article></section>
     </section>
     <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Ten small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
@@ -34,6 +35,7 @@ const trailMapElement = document.querySelector<HTMLElement>("#trail-map");
 const mapDescription = document.querySelector<HTMLElement>("#map-description");
 const trailMap = trailMapElement && mapDescription ? new TrailMap(trailMapElement, mapDescription, (startId) => setStart(startId as StartId)) : undefined;
 let preparedGpxUrl: string | undefined;
+let routeBriefingText = "";
 const clearPreparedGpx = (): void => {
   if (preparedGpxUrl) URL.revokeObjectURL(preparedGpxUrl);
   preparedGpxUrl = undefined;
@@ -52,7 +54,57 @@ const renderPreparedGpx = (prepared: PreparedGpx): void => {
   if (download) { download.href = preparedGpxUrl; download.download = prepared.filename; }
   if (exportPanel) exportPanel.hidden = false;
 };
+const clearRouteBriefing = (): void => {
+  routeBriefingText = "";
+  const briefing = document.querySelector<HTMLElement>("#route-briefing");
+  const text = document.querySelector<HTMLElement>("#route-briefing-text");
+  const status = document.querySelector<HTMLElement>("#briefing-status");
+  if (briefing) briefing.hidden = true;
+  if (text) text.textContent = "";
+  if (status) status.textContent = "";
+};
+const forecastText = (window: WeatherWindow): string => `${window.date} · ${window.start}–${window.end} · ${window.summary} · ${window.temperatureC}°C · ${window.precipitationProbability}% rain · gusts ${window.gustKph} km/h`;
+const clearTrailWeather = (): void => {
+  const panel = document.querySelector<HTMLElement>("#route-weather");
+  const best = document.querySelector<HTMLElement>("#weather-best");
+  const days = document.querySelector<HTMLUListElement>("#weather-days");
+  const status = document.querySelector<HTMLElement>("#weather-status");
+  if (panel) panel.hidden = true;
+  if (best) best.textContent = "";
+  if (days) days.replaceChildren();
+  if (status) status.textContent = "";
+};
+const renderTrailWeather = (forecast: TrailWeather): void => {
+  const panel = document.querySelector<HTMLElement>("#route-weather");
+  const best = document.querySelector<HTMLElement>("#weather-best");
+  const days = document.querySelector<HTMLUListElement>("#weather-days");
+  const status = document.querySelector<HTMLElement>("#weather-status");
+  const bestByDay = new Map<string, WeatherWindow>();
+  for (const window of forecast.windows) {
+    const current = bestByDay.get(window.date);
+    if (!current || window.score < current.score) bestByDay.set(window.date, window);
+  }
+  if (best) best.textContent = `Least-exposed forecast window: ${forecastText(forecast.bestWindow)} (${forecast.timezone}).`;
+  if (days) {
+    days.replaceChildren(...[...bestByDay.values()].sort((left, right) => left.date.localeCompare(right.date)).map((window) => {
+      const item = document.createElement("li"); item.textContent = forecastText(window); return item;
+    }));
+  }
+  if (status) status.textContent = "Forecast is planning context only; check official alerts, closures, and local conditions.";
+  if (panel) panel.hidden = false;
+};
+const renderRouteBriefing = (briefing: PreparedRouteBriefing): void => {
+  routeBriefingText = briefing.text;
+  const panel = document.querySelector<HTMLElement>("#route-briefing");
+  const text = document.querySelector<HTMLElement>("#route-briefing-text");
+  const status = document.querySelector<HTMLElement>("#briefing-status");
+  if (text) text.textContent = briefing.text;
+  if (status) status.textContent = "Review the briefing, then copy it for your group. No message has been sent.";
+  if (panel) panel.hidden = false;
+};
 setGpxRenderer(renderPreparedGpx);
+setRouteBriefingRenderer(renderRouteBriefing);
+setTrailWeatherRenderer(renderTrailWeather);
 window.addEventListener("pagehide", clearPreparedGpx);
 const bridgeCopy: Record<BridgeStatus, { label: string; next: string }> = {
   unavailable: { label: "Browser demo mode", next: "In ChatGPT, start a fresh GPT-5.6 Sol or Terra chat, have it open this URL in its browser, then reload this page or press Check model context. A normal browser tab cannot expose agent tools." },
@@ -88,8 +140,14 @@ setToolInvocationObserver((name, input, result, error) => addLog(name, input, re
 async function renderRoute(route: PlannedRoute): Promise<void> {
   syncPlannerToRoute(route);
   clearPreparedGpx();
+  clearRouteBriefing();
+  clearTrailWeather();
   const prepareGpx = document.querySelector<HTMLButtonElement>("#prepare-gpx");
+  const checkWeather = document.querySelector<HTMLButtonElement>("#check-weather");
+  const prepareBriefing = document.querySelector<HTMLButtonElement>("#prepare-briefing");
   if (prepareGpx) prepareGpx.hidden = true;
+  if (checkWeather) checkWeather.hidden = true;
+  if (prepareBriefing) prepareBriefing.hidden = true;
   const state = document.querySelector<HTMLElement>("#route-state");
   const name = document.querySelector<HTMLElement>("#route-name"); const distance = document.querySelector<HTMLElement>("#route-distance"); const ascent = document.querySelector<HTMLElement>("#route-ascent"); const duration = document.querySelector<HTMLElement>("#route-duration"); const kicker = document.querySelector<HTMLElement>("#route-kicker"); const note = document.querySelector<HTMLElement>("#route-note");
   if (state) state.textContent = "Checking elevation…"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (ascent) ascent.textContent = "Estimating…"; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Circuit found"; if (note) note.textContent = "Drawing the verified circuit and sampling its terrain profile…";
@@ -98,6 +156,8 @@ async function renderRoute(route: PlannedRoute): Promise<void> {
   const assessment = assessRouteDifficulty(route);
   if (state) state.textContent = "Closed circuit"; if (ascent) ascent.textContent = route.ascentM === null ? "Unavailable" : `${route.ascentM} m`; if (kicker) kicker.textContent = assessment.level === "unrated" ? "Difficulty unrated" : `${assessment.level[0]!.toUpperCase()}${assessment.level.slice(1)} route`; if (note) note.textContent = `${assessment.rationale} ${assessment.limitations}`;
   if (prepareGpx) { prepareGpx.hidden = false; prepareGpx.disabled = false; prepareGpx.innerHTML = `Prepare GPX download <span aria-hidden="true">↓</span>`; }
+  if (checkWeather) { checkWeather.hidden = false; checkWeather.disabled = false; checkWeather.innerHTML = `Check next 3 days <span aria-hidden="true">↗</span>`; }
+  if (prepareBriefing) { prepareBriefing.hidden = false; prepareBriefing.disabled = false; prepareBriefing.innerHTML = `Prepare family briefing <span aria-hidden="true">↗</span>`; }
 }
 setRouteRenderer(renderRoute);
 
@@ -138,6 +198,8 @@ const renderRequestPreview = (): void => {
   const start = documentedStarts[selectedStart];
   const distanceKm = Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7);
   clearPreparedGpx();
+  clearRouteBriefing();
+  clearTrailWeather();
   const state = document.querySelector<HTMLElement>("#route-state");
   const name = document.querySelector<HTMLElement>("#route-name");
   const distance = document.querySelector<HTMLElement>("#route-distance");
@@ -153,7 +215,11 @@ const renderRequestPreview = (): void => {
   if (note) note.textContent = `Generate to draw a circuit from ${start.name}. It must return to this start without a long retraced leg.`;
   if (help) help.textContent = `Verified loop lengths here: ${circuitDistancesFor(start).join(", ")} km.`;
   const prepareGpx = document.querySelector<HTMLButtonElement>("#prepare-gpx");
+  const checkWeather = document.querySelector<HTMLButtonElement>("#check-weather");
+  const prepareBriefing = document.querySelector<HTMLButtonElement>("#prepare-briefing");
   if (prepareGpx) prepareGpx.hidden = true;
+  if (checkWeather) checkWeather.hidden = true;
+  if (prepareBriefing) prepareBriefing.hidden = true;
   document.querySelectorAll<HTMLButtonElement>(".circuit-option").forEach((button) => button.setAttribute("aria-pressed", String(Number(button.dataset.distance) === distanceKm)));
   trailMap?.clearRoute();
 };
@@ -194,6 +260,8 @@ document.querySelectorAll<HTMLButtonElement>(".transport-option").forEach((butto
 document.querySelector<HTMLButtonElement>("#change-start")?.addEventListener("click", () => {
   clearActiveRoute();
   clearPreparedGpx();
+  clearRouteBriefing();
+  clearTrailWeather();
   renderRequestPreview();
   trailMap?.previewStart(documentedStarts[selectedStart]);
   document.querySelector<HTMLElement>(".planner")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -204,12 +272,43 @@ document.querySelector<HTMLButtonElement>("#prepare-gpx")?.addEventListener("cli
   await invoke("prepare_gpx", {});
   if (button) { button.disabled = false; button.textContent = "GPX prepared"; }
 });
+document.querySelector<HTMLButtonElement>("#check-weather")?.addEventListener("click", async () => {
+  const button = document.querySelector<HTMLButtonElement>("#check-weather");
+  if (button) { button.disabled = true; button.textContent = "Checking forecast…"; }
+  await invoke("get_trail_weather", {});
+  if (button) { button.disabled = false; button.textContent = "Forecast checked"; }
+});
+document.querySelector<HTMLButtonElement>("#prepare-briefing")?.addEventListener("click", async () => {
+  const button = document.querySelector<HTMLButtonElement>("#prepare-briefing");
+  if (button) { button.disabled = true; button.textContent = "Preparing briefing…"; }
+  await invoke("prepare_route_briefing", {});
+  if (button) { button.disabled = false; button.textContent = "Briefing prepared"; }
+});
+document.querySelector<HTMLButtonElement>("#copy-briefing")?.addEventListener("click", async () => {
+  const status = document.querySelector<HTMLElement>("#briefing-status");
+  if (!routeBriefingText) return;
+  try {
+    await navigator.clipboard.writeText(routeBriefingText);
+    if (status) status.textContent = "Briefing copied. Paste it into your group chat when you are ready.";
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = routeBriefingText;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    if (status) status.textContent = copied ? "Briefing copied. Paste it into your group chat when you are ready." : "Copy is unavailable here. Select the briefing text and copy it manually.";
+  }
+});
 setTransport(selectedTransport);
 renderCircuitOptions();
 renderRequestPreview();
 trailMap?.previewStart(documentedStarts[selectedStart]);
 setPlanTargetRenderer(setDistance);
-document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { list_circuit_options: {}, validate_circuit: planInput(), record_session_note: { kind: "test", note: "In-page test recorded from the Switchback tool surface." }, plan_route: planInput(), get_route_summary: {}, explain_difficulty: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
+document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { list_circuit_options: {}, validate_circuit: planInput(), record_session_note: { kind: "test", note: "In-page test recorded from the Switchback tool surface." }, plan_route: planInput(), get_route_summary: {}, explain_difficulty: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, prepare_route_briefing: {}, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
 const agentTestPrompt = "Use the site tools on this Switchback page. First call list_circuit_options and choose a returned short, medium, or long distance profile; these are not difficulty ratings. Call validate_circuit, then plan_route and get_route_summary. Call explain_difficulty before recommending the route, record the result with record_session_note, and state its evidence and limitations.";
 document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListener("click", async () => {

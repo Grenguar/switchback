@@ -24,7 +24,7 @@ export const documentedStarts = {
     latitude: 41.41934275457755,
     longitude: 2.1276451494056836,
     availability: "available",
-    description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph. The current trail-only graph supports short loops here.",
+    description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph.",
   },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;

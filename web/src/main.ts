@@ -21,7 +21,7 @@ app.innerHTML = `
         <form id="plan-form"><fieldset class="start-picker"><legend>Start</legend><div class="start-options" role="group" aria-label="Available parking starts">${Object.values(documentedStarts).map((start, index) => `<button class="start-option" type="button" data-start="${start.id}" aria-pressed="${index === 0}"><strong>${start.name}</strong><small>${start.description}</small></button>`).join("")}</div></fieldset><fieldset class="distance-picker"><div class="distance-heading"><legend>Distance</legend><output id="distance-value">7 km</output></div><div class="distance-control"><button id="distance-down" type="button" aria-label="Reduce distance by half a kilometre">−</button><input id="distance" name="distance" type="range" min="1" max="30" step="0.5" value="7" aria-describedby="distance-help" /><button id="distance-up" type="button" aria-label="Increase distance by half a kilometre">+</button></div><p class="field-hint" id="distance-help">We only keep loops within 0.5 km of your choice.</p></fieldset><button class="plan-button" type="submit">Generate my loop <span aria-hidden="true">↗</span></button><p class="field-hint">Trail-first routing from a parking start. You can download the GPX when it looks right.</p></form>
         <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
-    <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive trail map. Drag to pan, scroll or pinch to zoom."></div><div class="map-style-toggle" role="group" aria-label="Map style"><button type="button" data-map-style="terrain" aria-pressed="true">Terrain</button><button type="button" data-map-style="satellite" aria-pressed="false">Satellite</button></div><p class="map-description" id="map-description" role="status">Loading the interactive trail map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">No route planned</span></span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a car park</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Pick a car park and distance, then we will draw a real trail circuit.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
+    <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive terrain map. Drag to explore; use the zoom controls, scroll wheel, keyboard, or pinch to zoom."></div><p class="map-description" id="map-description" role="status">Loading the interactive terrain map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">Choose a car park</span></span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a car park</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Choose a car park and distance, then generate a real trail circuit.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
     </section>
     <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Six small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>0${index + 1}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
@@ -108,16 +108,37 @@ async function invoke(name: string, input: Record<string, unknown>): Promise<voi
   try { await tool.execute(input, new AbortController().signal); } catch { /* The shared tool observer already records the failure. */ }
 }
 let selectedStart: StartId = "vista_rica_parking";
+const renderRequestPreview = (): void => {
+  const start = documentedStarts[selectedStart];
+  const distanceKm = Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7);
+  clearPreparedGpx();
+  const state = document.querySelector<HTMLElement>("#route-state");
+  const name = document.querySelector<HTMLElement>("#route-name");
+  const distance = document.querySelector<HTMLElement>("#route-distance");
+  const duration = document.querySelector<HTMLElement>("#route-duration");
+  const kicker = document.querySelector<HTMLElement>("#route-kicker");
+  const note = document.querySelector<HTMLElement>("#route-note");
+  if (state) state.textContent = `${distanceKm} km ready to generate`;
+  if (name) name.textContent = `${start.name}: ${distanceKm} km loop`;
+  if (distance) distance.textContent = `${distanceKm} km`;
+  if (duration) duration.textContent = "—";
+  if (kicker) kicker.textContent = "Car park selected";
+  if (note) note.textContent = "Generate to draw a trail circuit from this car park.";
+  trailMap?.clearRoute();
+};
 const setDistance = (requestedKm: number): void => {
   const distanceKm = Math.min(30, Math.max(1, Math.round(requestedKm * 2) / 2));
   const distance = document.querySelector<HTMLInputElement>("#distance");
   const value = document.querySelector<HTMLOutputElement>("#distance-value");
   if (distance) distance.value = String(distanceKm);
   if (value) value.value = `${distanceKm} km`;
+  renderRequestPreview();
 };
 const setStart = (start: StartId): void => {
   selectedStart = start;
   document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.start === start)));
+  trailMap?.previewStart(documentedStarts[start]);
+  renderRequestPreview();
 };
 const planInput = (): Record<string, unknown> => ({ start: selectedStart, target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7), prefer_waymarked: true });
 document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); void invoke("plan_route", planInput()); });
@@ -125,17 +146,7 @@ document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input",
 document.querySelector<HTMLButtonElement>("#distance-down")?.addEventListener("click", () => setDistance(Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7) - 0.5));
 document.querySelector<HTMLButtonElement>("#distance-up")?.addEventListener("click", () => setDistance(Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7) + 0.5));
 document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.addEventListener("click", () => setStart(button.dataset.start as StartId)));
-document.querySelectorAll<HTMLButtonElement>("[data-map-style]").forEach((button) => {
-  const style = button.dataset.mapStyle as "terrain" | "satellite";
-  if (style === "satellite" && !trailMap?.supportsSatellite) {
-    button.disabled = true;
-    button.title = "Add the scoped Amazon Location key to enable satellite.";
-  }
-  button.addEventListener("click", () => {
-    trailMap?.setStyle(style);
-    document.querySelectorAll<HTMLButtonElement>("[data-map-style]").forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === button)));
-  });
-});
+trailMap?.previewStart(documentedStarts[selectedStart]);
 setPlanTargetRenderer(setDistance);
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });

@@ -1,6 +1,5 @@
 import type { StyleSpecification } from "maplibre-gl";
 
-export type MapStyle = "terrain" | "satellite";
 export type MapProvider = "amazon-location" | "openstreetmap";
 
 // Console/terminal copies can occasionally wrap this browser key. Amazon
@@ -23,13 +22,11 @@ const openStreetMapStyle: StyleSpecification = {
   layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
 };
 
-const amazonStyle = (style: "Standard" | "Satellite"): string => {
+const amazonTerrainStyle = (): string => {
   const parameters = new URLSearchParams({ key: apiKey!, "color-scheme": "Light" });
-  if (style === "Standard") {
-    parameters.set("terrain", "Hillshade");
-    parameters.set("contour-density", "High");
-  }
-  return `https://maps.geo.${region}.amazonaws.com/v2/styles/${style}/descriptor?${parameters}`;
+  parameters.set("terrain", "Hillshade");
+  parameters.set("contour-density", "High");
+  return `https://maps.geo.${region}.amazonaws.com/v2/styles/Standard/descriptor?${parameters}`;
 };
 
 /**
@@ -39,12 +36,12 @@ const amazonStyle = (style: "Standard" | "Satellite"): string => {
  */
 export const mapConfiguration: {
   provider: MapProvider;
-  styles: Record<MapStyle, string | StyleSpecification>;
+  style: string | StyleSpecification;
   withApiKey(url: string): string;
 } = apiKey && region
   ? {
       provider: "amazon-location",
-      styles: { terrain: amazonStyle("Standard"), satellite: amazonStyle("Satellite") },
+      style: amazonTerrainStyle(),
       // Amazon's style descriptor references glyphs and sprites without its
       // key. MapLibre requests those independently, so decorate every Maps V2
       // URL while leaving non-AWS sources untouched.
@@ -54,4 +51,4 @@ export const mapConfiguration: {
         return parsed.toString();
       },
     }
-  : { provider: "openstreetmap", styles: { terrain: openStreetMapStyle, satellite: openStreetMapStyle }, withApiKey: (url) => url };
+  : { provider: "openstreetmap", style: openStreetMapStyle, withApiKey: (url) => url };

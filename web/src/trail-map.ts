@@ -1,6 +1,6 @@
-import { GeoJSONSource, LngLatBounds, Map as MapLibreMap, Marker, NavigationControl } from "maplibre-gl";
-import type { PlannedRoute } from "./planner";
-import { mapConfiguration, type MapStyle } from "./map-config";
+import { GeoJSONSource, LngLatBounds, Map as MapLibreMap, NavigationControl } from "maplibre-gl";
+import type { PlannedRoute, StartDefinition } from "./planner";
+import { mapConfiguration } from "./map-config";
 import type { TrailPackArtifact } from "./trailpack";
 
 type RouteFeature = {
@@ -9,10 +9,22 @@ type RouteFeature = {
   geometry: { type: "LineString"; coordinates: Array<[number, number]> };
 };
 
+type StartFeature = {
+  type: "Feature";
+  properties: Record<string, never>;
+  geometry: { type: "Point"; coordinates: [number, number] };
+};
+
 const routeFeature = (route: PlannedRoute): RouteFeature => ({
   type: "Feature",
   properties: {},
   geometry: { type: "LineString", coordinates: route.coordinates.map(([latitude, longitude]) => [longitude, latitude]) },
+});
+
+const startFeature = (start: Pick<StartDefinition, "latitude" | "longitude">): StartFeature => ({
+  type: "Feature",
+  properties: {},
+  geometry: { type: "Point", coordinates: [start.longitude, start.latitude] },
 });
 
 // Keep discovery in the intended running area. The graph may contain nearby
@@ -23,25 +35,29 @@ const COLLSEROLA_BOUNDS: [[number, number], [number, number]] = [[2.075, 41.395]
 export class TrailMap {
   private artifact: TrailPackArtifact | undefined;
   private route: PlannedRoute | undefined;
+  private selectedStart: StartDefinition | undefined;
   private loaded = false;
-  private currentStyle: MapStyle = "terrain";
-  private startMarker: Marker | undefined;
   private readonly map: MapLibreMap;
 
   constructor(container: HTMLElement, private readonly status: HTMLElement) {
     this.map = new MapLibreMap({
       container,
-      style: mapConfiguration.styles.terrain,
+      style: mapConfiguration.style,
       center: [2.126, 41.431],
       zoom: 13.2,
       minZoom: 12.2,
       maxZoom: 17,
+      dragPan: true,
+      scrollZoom: true,
+      touchZoomRotate: true,
+      keyboard: true,
+      doubleClickZoom: true,
       transformRequest: (url) => ({ url: mapConfiguration.withApiKey(url) }),
       // AWS Maps V2 styles include dynamic terrain extensions. Their
       // MapLibre guidance disables generic style validation for these styles.
       validateStyle: false,
     });
-    this.map.addControl(new NavigationControl({ visualizePitch: true }), "top-left");
+    this.map.addControl(new NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), "top-left");
     this.map.on("load", () => { this.loaded = true; this.sync(); });
     this.map.on("style.load", () => { this.loaded = true; this.sync(); });
     this.map.on("error", () => {
@@ -52,11 +68,9 @@ export class TrailMap {
     this.renderStatus();
   }
 
-  get supportsSatellite(): boolean { return mapConfiguration.provider === "amazon-location"; }
-
   setTrailPack(artifact: TrailPackArtifact): void {
     this.artifact = artifact;
-    if (this.loaded && !this.route) this.fitToArtifact();
+    if (this.loaded && !this.route && !this.selectedStart) this.fitToArtifact();
     this.renderStatus();
   }
 
@@ -68,45 +82,66 @@ export class TrailMap {
     }
   }
 
-  setStyle(style: MapStyle): void {
-    if (style === "satellite" && !this.supportsSatellite) return;
-    this.currentStyle = style;
-    this.loaded = false;
-    this.map.setStyle(mapConfiguration.styles[style]);
+  previewStart(start: StartDefinition): void {
+    this.selectedStart = start;
+    this.route = undefined;
+    if (!this.loaded) return;
+    this.hideRoute();
+    this.placeStartMarker(start);
+    this.map.flyTo({ center: [start.longitude, start.latitude], zoom: 14.1, duration: 420, essential: true });
+  }
+
+  clearRoute(): void {
+    this.route = undefined;
+    if (this.loaded) this.hideRoute();
   }
 
   private renderStatus(): void {
     const graph = this.artifact ? " TrailPack routes stay local." : "";
     this.status.textContent = mapConfiguration.provider === "amazon-location"
-      ? `Amazon Location ${this.currentStyle === "terrain" ? "terrain and contours" : "satellite"}.${graph}`
-      : `OpenStreetMap fallback.${graph} Add the scoped Amazon Location key to enable terrain and satellite.`;
+      ? `Amazon Location terrain and contours.${graph}`
+      : `OpenStreetMap fallback.${graph} Add the scoped Amazon Location key to enable the terrain map.`;
   }
 
   private sync(): void {
     this.renderStatus();
     if (!this.route) {
-      this.fitToArtifact();
+      this.hideRoute();
+      if (this.selectedStart) this.placeStartMarker(this.selectedStart);
+      else this.fitToArtifact();
       return;
     }
     const data = routeFeature(this.route);
     const existing = this.map.getSource("switchback-route") as GeoJSONSource | undefined;
-    if (existing) existing.setData(data);
+    if (existing) {
+      existing.setData(data);
+      this.map.setLayoutProperty("switchback-route-casing", "visibility", "visible");
+      this.map.setLayoutProperty("switchback-route", "visibility", "visible");
+    }
     else {
       this.map.addSource("switchback-route", { type: "geojson", data });
       this.map.addLayer({ id: "switchback-route-casing", type: "line", source: "switchback-route", paint: { "line-color": "#173328", "line-width": 8, "line-opacity": 0.8, "line-blur": 0.6 } });
       this.map.addLayer({ id: "switchback-route", type: "line", source: "switchback-route", paint: { "line-color": "#ff9d2e", "line-width": 4.5, "line-opacity": 1 } });
     }
-    this.placeStartMarker(this.route);
+    this.selectedStart = this.route.start;
+    this.placeStartMarker(this.route.start);
   }
 
-  private placeStartMarker(route: PlannedRoute): void {
-    if (!this.startMarker) {
-      const element = document.createElement("div");
-      element.className = "trailhead-marker";
-      element.setAttribute("aria-label", "Route start car park");
-      this.startMarker = new Marker({ element, anchor: "bottom" }).addTo(this.map);
+  private hideRoute(): void {
+    if (this.map.getLayer("switchback-route-casing")) this.map.setLayoutProperty("switchback-route-casing", "visibility", "none");
+    if (this.map.getLayer("switchback-route")) this.map.setLayoutProperty("switchback-route", "visibility", "none");
+  }
+
+  private placeStartMarker(start: Pick<StartDefinition, "latitude" | "longitude">): void {
+    const data = startFeature(start);
+    const existing = this.map.getSource("switchback-start") as GeoJSONSource | undefined;
+    if (existing) {
+      existing.setData(data);
+      return;
     }
-    this.startMarker.setLngLat([route.start.longitude, route.start.latitude]);
+    this.map.addSource("switchback-start", { type: "geojson", data });
+    this.map.addLayer({ id: "switchback-start-casing", type: "circle", source: "switchback-start", paint: { "circle-radius": 13, "circle-color": "#f8f5df", "circle-stroke-color": "#173328", "circle-stroke-width": 2 } });
+    this.map.addLayer({ id: "switchback-start", type: "circle", source: "switchback-start", paint: { "circle-radius": 8, "circle-color": "#427e2e", "circle-stroke-color": "#dce9a0", "circle-stroke-width": 2 } });
   }
 
   private fitToArtifact(): void {

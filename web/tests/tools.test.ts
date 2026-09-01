@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { TrailPlanner, circuitDistancesFor, selectableCircuitStartIds, documentedStarts, type PlannedRoute } from "../src/planner";
+import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, selectableCircuitStartIds, documentedStarts, type PlannedRoute } from "../src/planner";
 import { clearActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
@@ -76,8 +76,10 @@ test("agent test tools disclose verified targets, dry-run without rendering, and
   let renders = 0; setRouteRenderer(() => { renders += 1; });
   const list = toolContracts.find((candidate) => candidate.name === "list_circuit_options"); const validate = toolContracts.find((candidate) => candidate.name === "validate_circuit"); const record = toolContracts.find((candidate) => candidate.name === "record_session_note");
   assert.ok(list); assert.ok(validate); assert.ok(record);
-  const options = await list.execute({}) as { options: Array<{ start: string; verified_targets_km: number[] }> };
-  assert.deepEqual(options.options.find((option) => option.start === "passeig_aigues_parking")?.verified_targets_km, [2]);
+  const options = await list.execute({}) as { options: Array<{ start: string; profiles: string[] }> };
+  assert.deepEqual(options.options.find((option) => option.start === "passeig_aigues_parking")?.profiles, ["easy:2km"]);
+  assert.deepEqual(options.options.find((option) => option.start === "vista_rica_parking")?.profiles, ["easy:2km", "medium:7km", "hard:14km"]);
+  assert.deepEqual(circuitOptionsFor(documentedStarts.can_coll_cerdanyola).map((profile) => profile.targetKm), [2, 5, 14]);
   const dryRun = await validate.execute({ start: "vista_rica_parking", target_km: 7, prefer_waymarked: true }) as { validated: boolean; rendered: boolean; returns_to_start: boolean };
   assert.equal(dryRun.validated, true); assert.equal(dryRun.rendered, false); assert.equal(dryRun.returns_to_start, true); assert.equal(renders, 0);
   await assert.rejects(() => validate.execute({ start: "passeig_aigues_parking", target_km: 3, prefer_waymarked: true }), /verified circuit targets/);

@@ -47,6 +47,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .change-start:hover { color: #edf0e5; background: #173328; border-color: #173328; }
 @media (max-width: 760px) { .masthead { height: auto; min-height: 70px; gap: 12px; } }
 
+/* Planner rhythm: each choice has its own readable block and a 4/8px scale. */
+.planner { padding: 32px; }
+.section-label { margin-bottom: 28px; }
+.planner form { gap: 28px; }
+.arrival-picker, .start-picker, .distance-picker { gap: 12px; }
+.field-hint { margin: 0; }
+.evidence { margin-top: 32px; padding-top: 24px; }
+.circuit-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.circuit-option { min-height: 76px; display: grid; align-content: center; gap: 5px; padding: 10px; color: #dce6de; text-align: left; background: transparent; border: 1px solid #607a6d; border-radius: 4px; transition: background .16s ease, border-color .16s ease, color .16s ease; }
+.circuit-option strong { font: 600 .7rem 'DM Mono', monospace; letter-spacing: .04em; text-transform: uppercase; }
+.circuit-option span { color: #aac0b4; font-size: .67rem; line-height: 1.35; }
+.circuit-option.medium { border-color: #718a6c; }
+.circuit-option.hard { border-color: #a68259; }
+.circuit-option[aria-pressed=true] { color: #173328; background: #dce9a0; border-color: #dce9a0; }
+.circuit-option[aria-pressed=true] span { color: #315445; }
+.circuit-option:hover { border-color: #b7cf5c; }
+.prepare-gpx { width: 100%; min-height: 44px; margin-top: 16px; padding: 10px 12px; color: #edf0e5; background: #173328; border: 1px solid #173328; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
+.prepare-gpx:hover { background: #315c48; border-color: #315c48; }
+.prepare-gpx:disabled { cursor: wait; opacity: .7; }
+.route-card .gpx-export + .change-start { margin-top: 12px; }
+@media (max-width: 760px) { .planner { padding: 24px 20px 28px; }.planner form { gap: 24px; }.circuit-options { grid-template-columns: 1fr; }.circuit-option { min-height: 62px; grid-template-columns: 1fr auto; align-items: center; }.circuit-option span { text-align: right; }.evidence { margin-top: 28px; } }
+
 /* A trailhead-first planner: clear choices, one primary action, no hidden units. */
 .planner { gap: 0; }
 .planner form { gap: 20px; }

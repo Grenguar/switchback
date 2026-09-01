@@ -1,4 +1,4 @@
-import { TrailPlanner, circuitDistancesFor, documentedStarts, selectableCircuitStartIds, type PlannedRoute, type Waypoint } from "./planner";
+import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, documentedStarts, selectableCircuitStartIds, type PlannedRoute, type Waypoint } from "./planner";
 import { RouteSession, type WaypointEdit } from "./route-session";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
@@ -84,11 +84,11 @@ const gpxFor = (route: PlannedRoute): PreparedGpx => {
 
 const rawToolContracts: ToolContract[] = [
   {
-    name: "list_circuit_options", description: "List every currently selectable Collserola circuit origin, its arrival mode, and only the target distances that have been verified to close a non-retracing loop. Use this before proposing a route.", annotations: readOnly,
+    name: "list_circuit_options", description: "List every selectable Collserola circuit origin, its arrival mode, and its graph-verified easy, medium, or hard distance profiles. Use this before proposing a route.", annotations: readOnly,
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => {
       only(object(input), []);
-      return abortable(signal, { options: selectableCircuitStartIds.map((id) => { const start = documentedStarts[id]; return { start: id, name: start.name, arrival_mode: start.transportMode, verified_targets_km: circuitDistancesFor(start), recommended_km: start.recommendedKm }; }), source: "Current static Collserola TrailPack circuit matrix", caution: "Other documented access points are intentionally absent because they have not formed a verified non-retracing circuit." });
+      return abortable(signal, { options: selectableCircuitStartIds.map((id) => { const start = documentedStarts[id]; return { start: id, name: start.name, arrival_mode: start.transportMode, profiles: circuitOptionsFor(start).map((option) => `${option.profile}:${option.targetKm}km`) }; }), source: "Current static Collserola TrailPack circuit matrix", caution: "Profiles describe distance only; elevation and technical difficulty are incomplete." });
     },
   },
   {

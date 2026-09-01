@@ -50,6 +50,8 @@ VITE_AWS_LOCATION_REGION=eu-west-1
 keys here: create an Amazon Location API key restricted to `geo-maps:*`,
 `arn:aws:geo-maps:eu-west-1::provider/default`, and the production site
 referrer only. Rebuild the Netlify site after adding or rotating the key.
+For local work, copy [`.env.example`](.env.example) to the repository root as
+`.env`; Vite reads that root file while serving `web/`.
 
 Run the complete offline validation and evidence bundle from a Node 24 shell:
 

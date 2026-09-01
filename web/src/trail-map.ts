@@ -15,6 +15,10 @@ const routeFeature = (route: PlannedRoute): RouteFeature => ({
   geometry: { type: "LineString", coordinates: route.coordinates.map(([latitude, longitude]) => [longitude, latitude]) },
 });
 
+// Keep discovery in the intended running area. The graph may contain nearby
+// Barcelona connections, but this map is for Collserola–Vallvidrera outings.
+const COLLSEROLA_BOUNDS: [[number, number], [number, number]] = [[2.075, 41.395], [2.17, 41.46]];
+
 /** An interactive basemap; only the selected, graph-planned circuit is drawn. */
 export class TrailMap {
   private artifact: TrailPackArtifact | undefined;
@@ -29,7 +33,13 @@ export class TrailMap {
       container,
       style: mapConfiguration.styles.terrain,
       center: [2.126, 41.431],
-      zoom: 12.5,
+      zoom: 13.2,
+      minZoom: 12.2,
+      maxZoom: 17,
+      transformRequest: (url) => ({ url: mapConfiguration.withApiKey(url) }),
+      // AWS Maps V2 styles include dynamic terrain extensions. Their
+      // MapLibre guidance disables generic style validation for these styles.
+      validateStyle: false,
     });
     this.map.addControl(new NavigationControl({ visualizePitch: true }), "top-left");
     this.map.on("load", () => { this.loaded = true; this.sync(); });
@@ -101,8 +111,7 @@ export class TrailMap {
 
   private fitToArtifact(): void {
     if (!this.artifact) return;
-    const [west, south, east, north] = this.artifact.manifest.bbox;
-    this.map.fitBounds([[west, south], [east, north]], { padding: 48, duration: 0, maxZoom: 13 });
+    this.map.fitBounds(COLLSEROLA_BOUNDS, { padding: 48, duration: 0, maxZoom: 13.2 });
   }
 
   private fitToRoute(route: PlannedRoute): void {

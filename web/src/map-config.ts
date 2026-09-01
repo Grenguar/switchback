@@ -3,7 +3,10 @@ import type { StyleSpecification } from "maplibre-gl";
 export type MapStyle = "terrain" | "satellite";
 export type MapProvider = "amazon-location" | "openstreetmap";
 
-const apiKey = import.meta.env.VITE_AWS_LOCATION_API_KEY?.trim();
+// Console/terminal copies can occasionally wrap this browser key. Amazon
+// Location keys never contain whitespace, so normalize it before composing
+// style, sprite, glyph, and tile requests.
+const apiKey = import.meta.env.VITE_AWS_LOCATION_API_KEY?.replace(/\s+/g, "");
 const region = import.meta.env.VITE_AWS_LOCATION_REGION?.trim();
 
 const openStreetMapStyle: StyleSpecification = {
@@ -37,6 +40,18 @@ const amazonStyle = (style: "Standard" | "Satellite"): string => {
 export const mapConfiguration: {
   provider: MapProvider;
   styles: Record<MapStyle, string | StyleSpecification>;
+  withApiKey(url: string): string;
 } = apiKey && region
-  ? { provider: "amazon-location", styles: { terrain: amazonStyle("Standard"), satellite: amazonStyle("Satellite") } }
-  : { provider: "openstreetmap", styles: { terrain: openStreetMapStyle, satellite: openStreetMapStyle } };
+  ? {
+      provider: "amazon-location",
+      styles: { terrain: amazonStyle("Standard"), satellite: amazonStyle("Satellite") },
+      // Amazon's style descriptor references glyphs and sprites without its
+      // key. MapLibre requests those independently, so decorate every Maps V2
+      // URL while leaving non-AWS sources untouched.
+      withApiKey: (url) => {
+        const parsed = new URL(url);
+        if (parsed.hostname === `maps.geo.${region}.amazonaws.com` && !parsed.searchParams.has("key")) parsed.searchParams.set("key", apiKey);
+        return parsed.toString();
+      },
+    }
+  : { provider: "openstreetmap", styles: { terrain: openStreetMapStyle, satellite: openStreetMapStyle }, withApiKey: (url) => url };

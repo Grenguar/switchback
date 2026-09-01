@@ -45,6 +45,18 @@ Length profiles are **Short / Medium / Long**, never difficulty labels. `explain
 
 The current TrailPack does **not** prove current signs, closures, weather, surface condition, obstacles, exposure, grade, or technical difficulty. Park marked-path preference is evidence from the published network, not a statement of present-day waymarking. Check local conditions before departure.
 
+### Optional Park-alert translations
+
+The `/api/park-alerts` Netlify function always returns the Park's original Catalan notices. When these server-only variables are set in Netlify Functions, it additionally renders an English machine translation under each notice:
+
+```text
+SWITCHBACK_TRANSLATE_REGION=eu-west-1
+SWITCHBACK_TRANSLATE_ACCESS_KEY_ID=...
+SWITCHBACK_TRANSLATE_SECRET_ACCESS_KEY=...
+```
+
+Use an IAM identity limited to `translate:TranslateText`; do not use `VITE_` names. Translation is optional: a missing or failed AWS call leaves the Catalan source notice visible. The endpoint is rate-limited to 20 requests per IP per minute to protect the Park source and translation spend.
+
 ## Run locally
 
 Prerequisites: Node 24+ and pnpm. Rust is only needed to rebuild TrailPack data.

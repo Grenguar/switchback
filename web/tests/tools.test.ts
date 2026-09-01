@@ -5,7 +5,7 @@ import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, selectableCircuit
 import { clearActiveRoute, setGpxRenderer, setParkAlertsRenderer, setPlanTargetRenderer, setRouteBriefingRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, setTrailWeatherRenderer, toolContracts, type PreparedGpx, type PreparedRouteBriefing } from "../src/tools";
 // Netlify runs this plain ESM function module; the parser itself is exercised here.
 // @ts-expect-error Netlify function modules are not part of the browser TypeScript program.
-import { parseActiveAlerts } from "../netlify/functions/park-alerts.mjs";
+import { parseActiveAlerts, translateActiveAlerts } from "../netlify/functions/park-alerts.mjs";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -33,6 +33,14 @@ test("Park alert adapter parses only the active official-alert section", () => {
     { title: "Access closure", published: "setembre 1, 2026", excerpt: "Do not enter the affected sector.", url: "https://park.test/closure" },
     { title: "Wind warning", published: "setembre 2, 2026", excerpt: "High winds are expected.", url: "https://park.test/wind" },
   ]);
+});
+
+test("Park alerts retain their Catalan source when AWS translation is unavailable", async () => {
+  const source = [{ title: "Alerta d'incendi", published: "setembre 1, 2026", excerpt: "Eviteu la zona afectada.", url: "https://parcnaturalcollserola.cat/alerta" }];
+  const translated = await translateActiveAlerts(source, { send: async (command: { input: { Text: string } }) => ({ TranslatedText: command.input.Text === source[0]?.title ? "Fire alert" : "Avoid the affected area." }) });
+  assert.deepEqual(translated[0]?.translation, { language: "en", provider: "AWS Translate", title: "Fire alert", excerpt: "Avoid the affected area." });
+  const fallback = await translateActiveAlerts(source, undefined);
+  assert.equal(fallback[0]?.translation, null); assert.equal(fallback[0]?.title, source[0]?.title);
 });
 
 test("get_park_alerts returns sourced notices without claiming route applicability", async () => {

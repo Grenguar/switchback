@@ -121,7 +121,13 @@ const renderParkAlerts = (alerts: ParkAlerts): void => {
       const item = document.createElement("li"); const link = document.createElement("a"); const date = document.createElement("span"); const excerpt = document.createElement("p");
       link.href = alert.url; link.target = "_blank"; link.rel = "noreferrer"; link.textContent = alert.title;
       date.textContent = alert.published; excerpt.textContent = alert.excerpt;
-      item.append(link, date, excerpt); return item;
+      item.append(link, date, excerpt);
+      if (alert.translation) {
+        const translation = document.createElement("div"); const label = document.createElement("strong"); const translatedTitle = document.createElement("p"); const translatedExcerpt = document.createElement("p");
+        translation.className = "park-alert-translation"; label.textContent = "English machine translation"; translatedTitle.textContent = alert.translation.title; translatedExcerpt.textContent = alert.translation.excerpt;
+        translation.append(label, translatedTitle, translatedExcerpt); item.append(translation);
+      }
+      return item;
     }));
   }
   if (source) { source.href = alerts.sourceUrl; source.hidden = false; }

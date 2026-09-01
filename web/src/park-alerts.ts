@@ -1,4 +1,5 @@
-export type ParkAlert = Readonly<{ title: string; published: string; excerpt: string; url: string }>;
+export type ParkAlertTranslation = Readonly<{ language: "en"; provider: "AWS Translate"; title: string; excerpt: string }>;
+export type ParkAlert = Readonly<{ title: string; published: string; excerpt: string; url: string; translation: ParkAlertTranslation | null }>;
 export type ParkAlerts = Readonly<{ sourceUrl: string; fetchedAt: string; alerts: readonly ParkAlert[]; caution: string }>;
 
 type ParkAlertsResponse = { source_url?: unknown; fetched_at?: unknown; alerts?: unknown; caution?: unknown; error?: unknown };
@@ -23,7 +24,15 @@ export async function fetchParkAlerts(fetcher: typeof fetch = fetch): Promise<Pa
   const alerts = data.alerts.map((value): ParkAlert => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("A Park alert is invalid.");
     const alert = value as Record<string, unknown>;
-    return Object.freeze({ title: text(alert.title, "title"), published: text(alert.published, "date"), excerpt: text(alert.excerpt, "excerpt"), url: parkUrl(alert.url) });
+    const translationValue = alert.translation;
+    let translation: ParkAlertTranslation | null = null;
+    if (translationValue !== null && translationValue !== undefined) {
+      if (typeof translationValue !== "object" || Array.isArray(translationValue)) throw new Error("A Park alert translation is invalid.");
+      const value = translationValue as Record<string, unknown>;
+      if (value.language !== "en" || value.provider !== "AWS Translate") throw new Error("A Park alert translation has an unknown source.");
+      translation = Object.freeze({ language: "en", provider: "AWS Translate", title: text(value.title, "translated title"), excerpt: text(value.excerpt, "translated excerpt") });
+    }
+    return Object.freeze({ title: text(alert.title, "title"), published: text(alert.published, "date"), excerpt: text(alert.excerpt, "excerpt"), url: parkUrl(alert.url), translation });
   });
   return Object.freeze({ sourceUrl: text(data.source_url, "source URL"), fetchedAt: text(data.fetched_at, "fetch time"), alerts: Object.freeze(alerts), caution: text(data.caution, "caution") });
 }

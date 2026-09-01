@@ -18,7 +18,7 @@ app.innerHTML = `
     <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
       <aside class="planner"><div class="section-label"><span>01</span><p>Plan a walk</p></div>
-        <form id="plan-form"><fieldset class="start-picker"><legend>Start</legend><div class="start-options" role="group" aria-label="Available parking starts">${Object.values(documentedStarts).map((start, index) => `<button class="start-option" type="button" data-start="${start.id}" aria-pressed="${index === 0}"><strong>${start.name}</strong><small>${start.description}</small></button>`).join("")}</div></fieldset><fieldset class="distance-picker"><div class="distance-heading"><legend>Distance</legend><output id="distance-value">7 km</output></div><div class="distance-control"><button id="distance-down" type="button" aria-label="Reduce distance by half a kilometre">−</button><input id="distance" name="distance" type="range" min="1" max="30" step="0.5" value="7" aria-describedby="distance-help" /><button id="distance-up" type="button" aria-label="Increase distance by half a kilometre">+</button></div><p class="field-hint" id="distance-help">We only keep loops within 0.5 km of your choice.</p></fieldset><button class="plan-button" type="submit">Generate my loop <span aria-hidden="true">↗</span></button><p class="field-hint">Trail-first routing from a parking start. You can download the GPX when it looks right.</p></form>
+        <form id="plan-form"><fieldset class="arrival-picker"><legend>Getting there</legend><div class="transport-options" role="group" aria-label="Arrival mode"><button class="transport-option" type="button" data-transport="car" aria-pressed="true">By car</button><button class="transport-option" type="button" data-transport="public_transport" aria-pressed="false">Public transport</button></div></fieldset><fieldset class="start-picker"><legend>Start</legend><div class="start-options" role="group" aria-label="Available route starts">${Object.values(documentedStarts).map((start, index) => `<button class="start-option" type="button" data-start="${start.id}" data-transport="${start.transportMode}" aria-pressed="${index === 0}" ${start.circuitStatus === "verified" ? "" : "disabled"}><strong>${start.name}</strong><small>${start.description}${start.circuitStatus === "point_to_point_only" ? " Circuit planning is not verified here yet." : ""}</small></button>`).join("")}</div></fieldset><fieldset class="distance-picker"><div class="distance-heading"><legend>Distance</legend><output id="distance-value">7 km</output></div><div class="distance-control"><button id="distance-down" type="button" aria-label="Reduce distance by half a kilometre">−</button><input id="distance" name="distance" type="range" min="1" max="30" step="0.5" value="7" aria-describedby="distance-help" /><button id="distance-up" type="button" aria-label="Increase distance by half a kilometre">+</button></div><p class="field-hint" id="distance-help">Every result must close back at its start and stay within 0.5 km of your choice.</p></fieldset><button class="plan-button" type="submit">Generate my loop <span aria-hidden="true">↗</span></button><p class="field-hint">Trail-first circuit planning. Download the GPX when the loop looks right.</p></form>
         <section class="evidence" aria-labelledby="trailpack-title"><p class="eyebrow" id="trailpack-title">TrailPack data</p><p class="data-status loading" id="trailpack-status" role="status">Loading static graph…</p><strong id="trailpack-region">No graph loaded</strong><ul id="trailpack-sources" class="source-list" aria-label="TrailPack attributions"></ul></section>
       </aside>
     <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive terrain map. Drag to explore; use the zoom controls, scroll wheel, keyboard, or pinch to zoom. Click an official marked path to identify it."></div><p class="map-description" id="map-description" role="status">Loading the interactive terrain map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">Choose a car park</span></span><span class="official-network-key"><i class="network-swatch"></i>Official marked paths A–E</span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a car park</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">Unknown</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Choose a car park and distance, then generate a real trail circuit.</p><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section></article></section>
@@ -87,7 +87,7 @@ function renderRoute(route: PlannedRoute): void {
   clearPreparedGpx();
   const state = document.querySelector<HTMLElement>("#route-state");
   const name = document.querySelector<HTMLElement>("#route-name"); const distance = document.querySelector<HTMLElement>("#route-distance"); const duration = document.querySelector<HTMLElement>("#route-duration"); const kicker = document.querySelector<HTMLElement>("#route-kicker"); const note = document.querySelector<HTMLElement>("#route-note");
-  if (state) state.textContent = "Your trail circuit"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Ready to walk"; if (note) note.textContent = `${route.waymarkedPercent}% marked-path coverage. Elevation unknown; check local conditions before you go.`;
+  if (state) state.textContent = "Closed circuit"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Ready to walk"; if (note) note.textContent = `Returns to your start · ${route.sharedAccessPercent}% shared access · ${route.waymarkedPercent}% marked paths. Elevation unknown; check local conditions before you go.`;
   trailMap?.setRoute(route);
 }
 setRouteRenderer(renderRoute);
@@ -107,6 +107,8 @@ async function invoke(name: string, input: Record<string, unknown>): Promise<voi
   const tool = toolContracts.find((candidate) => candidate.name === name); if (!tool) return;
   try { await tool.execute(input, new AbortController().signal); } catch { /* The shared tool observer already records the failure. */ }
 }
+type TransportMode = "car" | "public_transport";
+let selectedTransport: TransportMode = "car";
 let selectedStart: StartId = "vista_rica_parking";
 const renderRequestPreview = (): void => {
   const start = documentedStarts[selectedStart];
@@ -123,40 +125,48 @@ const renderRequestPreview = (): void => {
   if (distance) distance.textContent = `${distanceKm} km`;
   if (duration) duration.textContent = "—";
   if (kicker) kicker.textContent = "Car park selected";
-  if (note) note.textContent = start.maxLoopKm < 30
-    ? `This car park has verified non-retracing loops from 1 to ${start.maxLoopKm} km in the current TrailPack.`
-    : "Generate to draw a trail circuit from this car park.";
+  if (note) note.textContent = `Generate to draw a circuit from ${start.name}. It must return to this start without a long retraced leg.`;
   trailMap?.clearRoute();
 };
 const setDistance = (requestedKm: number): void => {
-  const maximum = documentedStarts[selectedStart].maxLoopKm;
-  const distanceKm = Math.min(maximum, Math.max(1, Math.round(requestedKm * 2) / 2));
+  const distanceKm = Math.min(30, Math.max(1, Math.round(requestedKm * 2) / 2));
   const distance = document.querySelector<HTMLInputElement>("#distance");
   const value = document.querySelector<HTMLOutputElement>("#distance-value");
-  if (distance) { distance.max = String(maximum); distance.value = String(distanceKm); }
+  if (distance) distance.value = String(distanceKm);
   if (value) value.value = `${distanceKm} km`;
   renderRequestPreview();
 };
 const setStart = (start: StartId): void => {
   if (start === selectedStart) return;
+  if (documentedStarts[start].circuitStatus !== "verified") return;
   selectedStart = start;
   clearActiveRoute();
   document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.start === start)));
-  const requested = Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7);
-  setDistance(requested);
+  setDistance(documentedStarts[start].recommendedKm);
   trailMap?.previewStart(documentedStarts[start]);
 };
-const planInput = (): Record<string, unknown> => ({ start: selectedStart, target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7), prefer_waymarked: true });
+const setTransport = (mode: TransportMode): void => {
+  selectedTransport = mode;
+  document.querySelectorAll<HTMLButtonElement>(".transport-option").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.transport === mode)));
+  document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => { button.hidden = button.dataset.transport !== mode; });
+  if (documentedStarts[selectedStart].transportMode !== mode) {
+    const next = (Object.values(documentedStarts).find((start) => start.transportMode === mode && start.circuitStatus === "verified"));
+    if (next) setStart(next.id as StartId);
+  }
+};
+const planInput = (): Record<string, unknown> => ({ start: selectedStart, arrival_mode: selectedTransport, target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7), prefer_waymarked: true });
 document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); void invoke("plan_route", planInput()); });
 document.querySelector<HTMLInputElement>("#distance")?.addEventListener("input", (event) => setDistance(Number((event.currentTarget as HTMLInputElement).value)));
 document.querySelector<HTMLButtonElement>("#distance-down")?.addEventListener("click", () => setDistance(Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7) - 0.5));
 document.querySelector<HTMLButtonElement>("#distance-up")?.addEventListener("click", () => setDistance(Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7) + 0.5));
 document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.addEventListener("click", () => setStart(button.dataset.start as StartId)));
+document.querySelectorAll<HTMLButtonElement>(".transport-option").forEach((button) => button.addEventListener("click", () => setTransport(button.dataset.transport as TransportMode)));
+setTransport(selectedTransport);
 trailMap?.previewStart(documentedStarts[selectedStart]);
 setPlanTargetRenderer(setDistance);
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
-const agentTestPrompt = "Use the site tools on this Switchback page. Plan a 7 km loop from Vista Rica parking, preferring the official marked-path network. Then call get_route_summary and state the data limitations.";
+const agentTestPrompt = "Use the site tools on this Switchback page. Plan a 7 km car-access loop from Vista Rica parking, with arrival_mode car and a preference for official marked paths. Then call get_route_summary and verify that the route is a circuit returning to its start.";
 document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListener("click", async () => {
   const status = document.querySelector<HTMLElement>("#copy-agent-prompt-status");
   try {

@@ -48,12 +48,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 /* A trailhead-first planner: clear choices, one primary action, no hidden units. */
 .planner { gap: 0; }
 .planner form { gap: 20px; }
-.route-question label, .start-picker legend, .distance-picker legend { color: #edf0e5; font-size: .73rem; }
+.route-question label, .arrival-picker legend, .start-picker legend, .distance-picker legend { color: #edf0e5; font-size: .73rem; }
 .route-request-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 9px; }
 .route-request-row input { min-width: 0; min-height: 48px; margin: 0 !important; padding: 11px 12px !important; color: #173328 !important; background: #edf0e5 !important; border: 1px solid #edf0e5 !important; border-radius: 4px; }
 .route-request-row input::placeholder { color: #4f675d; }
 .plan-button.compact { min-height: 48px; padding: 10px 12px; white-space: nowrap; }
-.start-picker, .distance-picker { display: grid; gap: 10px; }
+.arrival-picker, .start-picker, .distance-picker { display: grid; gap: 10px; }
+.transport-options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.transport-option { min-height: 44px; color: #dce6de; background: transparent; border: 1px solid #607a6d; border-radius: 4px; font: 600 .68rem 'DM Mono', monospace; letter-spacing: .04em; text-transform: uppercase; transition: background .16s ease, border-color .16s ease, color .16s ease; }
+.transport-option[aria-pressed=true] { color: #173328; background: #dce9a0; border-color: #dce9a0; }
+.transport-option:hover { border-color: #b7cf5c; }
 .start-options { display: grid; gap: 8px; }
 .start-option { width: 100%; min-height: 58px; display: grid; gap: 3px; padding: 10px 12px; color: #dce6de; text-align: left; background: transparent; border: 1px solid #607a6d; border-radius: 4px; transition: background .16s ease, border-color .16s ease, color .16s ease; }
 .start-option strong { font-size: .82rem; }
@@ -61,6 +65,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .start-option[aria-pressed=true] { color: #173328; background: #dce9a0; border-color: #dce9a0; }
 .start-option[aria-pressed=true] small { color: #315445; }
 .start-option:hover { border-color: #b7cf5c; }
+.start-option:disabled { cursor: not-allowed; opacity: .52; }
+.start-option:disabled:hover { border-color: #607a6d; }
 .distance-picker input[type=range] { margin: 0; }
 .distance-steps { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; }
 .distance-step { min-width: 0; min-height: 32px; padding: 4px 0; color: #c4d1c8; background: transparent; border: 1px solid #49655a; border-radius: 3px; font: .63rem 'DM Mono', monospace; transition: background .16s ease, color .16s ease, border-color .16s ease; }
@@ -71,7 +77,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
 /* The run-now flow: two decisions and one clear action. */
 .planner form { gap: 24px; }
-.start-picker, .distance-picker { gap: 9px; }
+.arrival-picker, .start-picker, .distance-picker { gap: 9px; }
 .start-options { grid-template-columns: 1fr; gap: 6px; }
 .start-option { min-height: 0; padding: 11px 12px; }
 .start-option small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }

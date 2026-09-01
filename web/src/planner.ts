@@ -6,8 +6,9 @@ export type StartDefinition = {
   latitude: number;
   longitude: number;
   availability: "available" | "unavailable";
-  /** Verified upper bound for a non-retracing loop in this TrailPack build. */
-  maxLoopKm: number;
+  transportMode: "car" | "public_transport";
+  circuitStatus: "verified" | "point_to_point_only";
+  recommendedKm: number;
   description: string;
 };
 
@@ -18,7 +19,9 @@ export const documentedStarts = {
     latitude: 41.431472,
     longitude: 2.126,
     availability: "available",
-    maxLoopKm: 30,
+    transportMode: "car",
+    circuitStatus: "verified",
+    recommendedKm: 7,
     description: "Car-access trailhead at the Vista Rica parking area on the Arrabassada road, verified 14 m from the Collserola trail graph.",
   },
   passeig_aigues_parking: {
@@ -27,13 +30,27 @@ export const documentedStarts = {
     latitude: 41.41934275457755,
     longitude: 2.1276451494056836,
     availability: "available",
-    maxLoopKm: 3.5,
+    transportMode: "car",
+    circuitStatus: "verified",
+    recommendedKm: 3.5,
     description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph.",
   },
+  centre_informacio_vallvidrera: { id: "centre_informacio_vallvidrera", name: "Centre d'Informació / Santa Maria de Vallvidrera", latitude: 41.41952, longitude: 2.10121, availability: "available", transportMode: "car", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "Free parking beside the church at the park’s main hub, with maps and a bar." },
+  budellera_parking: { id: "budellera_parking", name: "Parking Itineraris La Budellera", latitude: 41.42075, longitude: 2.10848, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 3.5, description: "Revolt de les Monges parking for roughly 10–13 cars; it fills quickly on fair weekends." },
+  panta_vallvidrera: { id: "panta_vallvidrera", name: "Pantà de Vallvidrera", latitude: 41.41520, longitude: 2.09744, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 3.5, description: "Roadside parking near the reservoir and GR-92." },
+  santa_creu_olorda: { id: "santa_creu_olorda", name: "Santa Creu d'Olorda", latitude: 41.41653, longitude: 2.05809, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 2, description: "Western car approach from Molins de Rei; the simplest access from Tarragona without crossing Barcelona." },
+  can_jane_sant_cugat: { id: "can_jane_sant_cugat", name: "Can Jané, Sant Cugat", latitude: 41.44457, longitude: 2.11759, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 7, description: "Car access for Sant Medir, with the trail network starting near Can Jané." },
+  can_coll_cerdanyola: { id: "can_coll_cerdanyola", name: "Can Coll, Cerdanyola", latitude: 41.47369, longitude: 2.12437, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 5, description: "Quiet northern-sector car start at Can Coll." },
+  baixador_vallvidrera: { id: "baixador_vallvidrera", name: "Baixador de Vallvidrera (FGC)", latitude: 41.42004, longitude: 2.09687, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "FGC S1/S2; a short walk to the information centre, Vil·la Joana, Budellera and the reservoir." },
+  les_planes_fgc: { id: "les_planes_fgc", name: "Les Planes (FGC)", latitude: 41.42742, longitude: 2.09158, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "FGC S1/S2 for northern trails toward Sant Medir and Can Borrell." },
+  la_floresta_fgc: { id: "la_floresta_fgc", name: "La Floresta (FGC)", latitude: 41.44490, longitude: 2.07308, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "FGC S1/S2 for the western Rierada and waterfall sector." },
+  peu_funicular: { id: "peu_funicular", name: "Peu del Funicular", latitude: 41.40907, longitude: 2.11143, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "Use the funicular to Vallvidrera Superior for ridge access without the climb." },
+  torre_baro_vallbona: { id: "torre_baro_vallbona", name: "Torre Baró / Vallbona", latitude: 41.45933, longitude: 2.18074, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "L11 and R3/R4 access at the far north-east ridge near Torre Baró castle." },
+  mirador_xiprers: { id: "mirador_xiprers", name: "Mirador dels Xiprers", latitude: 41.38992, longitude: 2.10010, availability: "available", transportMode: "public_transport", circuitStatus: "verified", recommendedKm: 7, description: "Bus 22 or Av. Tibidabo access for the Carretera de les Aigües balcony route." },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;
 export type PlannedSegment = { name: string; surface: string | null; sac_scale: string | null; waymarked: boolean; official_ref: string | null };
-export type PlannedRoute = { id: string; name: string; start: (typeof documentedStarts)[StartId]; distanceKm: number; durationHours: number; waymarkedPercent: number; coordinates: Array<[number, number]>; segments: PlannedSegment[]; edgeIds: string[]; source: string };
+export type PlannedRoute = { id: string; name: string; start: (typeof documentedStarts)[StartId]; distanceKm: number; durationHours: number; waymarkedPercent: number; sharedAccessPercent: number; coordinates: Array<[number, number]>; segments: PlannedSegment[]; edgeIds: string[]; source: string };
 /** A user-selected coordinate that must resolve to a nearby TrailPack node. */
 export type Waypoint = { latitude: number; longitude: number };
 export type PlannerProbe = { latitude: number; longitude: number; targetKm: number; preferWaymarked: boolean };
@@ -54,6 +71,9 @@ const MAX_LOOP_METRES = 60_000;
 // distance. Keep this human-scale and stable: a "7 km" walk can be 6.5–7.5 km,
 // never a percentage that becomes more permissive as the outing gets longer.
 export const TARGET_TOLERANCE_METRES = 500;
+// A short shared access spur is normal at a car park or station. Beyond this,
+// the picture is an out-and-back rather than the circuit a runner expects.
+export const MAX_SHARED_PHYSICAL_FRACTION = 0.30;
 // A documented trailhead must land close enough to an actual graph node that
 // the UI never silently starts a route from an unrelated trail.
 const MAX_SNAP_METRES = 1_000;
@@ -132,12 +152,15 @@ export class TrailPlanner {
       if (!returnEdges || returnEdges.length === 0) continue;
       const outwardPhysical = new Set(outEdges.map((edge) => edge.physical_id));
       const shared = returnEdges.filter((edge) => outwardPhysical.has(edge.physical_id)).length / Math.max(outEdges.length, returnEdges.length);
-      if (shared > 0.75) continue;
+      if (shared > MAX_SHARED_PHYSICAL_FRACTION) continue;
       const total = outEdges.concat(returnEdges).reduce((sum, edge) => sum + edge.length_m, 0);
       if (total > MAX_LOOP_METRES) continue;
       if (Math.abs(total - targetMetres) > TARGET_TOLERANCE_METRES) continue;
       const officialPenalty = preferWaymarked ? (outEdges.concat(returnEdges).filter((edge) => edge.official === null).length / (outEdges.length + returnEdges.length)) * 500 : 0;
-      const score = Math.abs(total - targetMetres) + officialPenalty;
+      // A recognisable circuit is worth a slightly less exact distance. The
+      // shared-access penalty breaks ties away from skinny, visually
+      // out-and-back-shaped traces when a broader loop is available.
+      const score = Math.abs(total - targetMetres) + officialPenalty + shared * 1_500;
       if (!winner || score < winner.score) winner = { score, edges: [...outEdges, ...returnEdges] };
     }
     if (!winner) {
@@ -254,7 +277,7 @@ export class TrailPlanner {
       if (!returnEdges || returnEdges.length === 0) { rejected.closure += 1; continue; }
       const outwardPhysical = new Set(outEdges.map((edge) => edge.physical_id));
       const shared = returnEdges.filter((edge) => outwardPhysical.has(edge.physical_id)).length / Math.max(outEdges.length, returnEdges.length);
-      if (shared > 0.75) { rejected.reuse += 1; continue; }
+      if (shared > MAX_SHARED_PHYSICAL_FRACTION) { rejected.reuse += 1; continue; }
       const total = outEdges.concat(returnEdges).reduce((sum, edge) => sum + edge.length_m, 0);
       if (total > MAX_LOOP_METRES) { rejected.distance += 1; continue; }
       viableLoops += 1;
@@ -283,8 +306,13 @@ export class TrailPlanner {
   }
 
   private toPlannedRoute(start: (typeof documentedStarts)[StartId], loopEdges: IndexedEdge[], suffix = ""): PlannedRoute {
+    if (loopEdges.length === 0 || loopEdges[0]!.from !== loopEdges.at(-1)!.to) {
+      throw new Error("TrailPack loop verification failed: the route does not return to its graph start.");
+    }
     const waymarkedMetres = loopEdges.filter((edge) => edge.official !== null).reduce((sum, edge) => sum + edge.length_m, 0);
     const distanceMetres = loopEdges.reduce((sum, edge) => sum + edge.length_m, 0);
+    const physicalIds = loopEdges.map((edge) => edge.physical_id);
+    const sharedAccessPercent = Math.round(((physicalIds.length - new Set(physicalIds).size) / physicalIds.length) * 100);
     const coordinates: Array<[number, number]> = [this.nodes[loopEdges[0]!.from]!];
     for (const edge of loopEdges) coordinates.push(this.nodes[edge.to]!);
     const segments = loopEdges.slice(0, 5).map((edge) => ({ name: edge.physical_id, surface: edge.terrain.surface, sac_scale: edge.terrain.sac_scale, waymarked: edge.official !== null, official_ref: edge.official?.ref_code ?? null }));
@@ -295,6 +323,7 @@ export class TrailPlanner {
       distanceKm: Math.round(distanceMetres / 100) / 10,
       durationHours: Math.round((distanceMetres / 4_000) * 10) / 10,
       waymarkedPercent: Math.round((waymarkedMetres / distanceMetres) * 100),
+      sharedAccessPercent,
       coordinates,
       segments,
       edgeIds: loopEdges.map((edge) => edge.id),
@@ -321,12 +350,12 @@ export class TrailPlanner {
       if (!returnEdges || returnEdges.length === 0) continue;
       const outwardPhysical = new Set(outEdges.map((edge) => edge.physical_id));
       const shared = returnEdges.filter((edge) => outwardPhysical.has(edge.physical_id)).length / Math.max(outEdges.length, returnEdges.length);
-      if (shared > 0.75) continue;
+      if (shared > MAX_SHARED_PHYSICAL_FRACTION) continue;
       const allEdges = outEdges.concat(returnEdges);
       const total = allEdges.reduce((sum, edge) => sum + edge.length_m, 0);
       if (total < MIN_LOOP_METRES || total > MAX_LOOP_METRES || allEdges.some((edge) => permanentlyBlocked.has(edge.physical_id))) continue;
       const officialPenalty = preferWaymarked ? (allEdges.filter((edge) => edge.official === null).length / allEdges.length) * 500 : 0;
-      const score = Math.abs(total - targetMetres) + officialPenalty;
+      const score = Math.abs(total - targetMetres) + officialPenalty + shared * 1_500;
       if (!winner || score < winner.score) winner = { score, edges: allEdges };
     }
     return winner?.edges;

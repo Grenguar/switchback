@@ -151,6 +151,9 @@ test("published Collserola TrailPack loads every static tile with official A-E p
   const vistaRicaCircuit = planner.plan("vista_rica_parking", 7, true);
   assert.ok(Math.abs(vistaRicaCircuit.distanceKm - 7) <= 0.5, `expected a circuit within ±0.5 km of 7 km, received ${vistaRicaCircuit.distanceKm} km`);
   assert.ok(vistaRicaCircuit.waymarkedPercent > 0, "expected the preferred circuit to use official marked paths");
-  const passeigAiguesCircuit = planner.plan("passeig_aigues_parking", 3, true);
-  assert.ok(Math.abs(passeigAiguesCircuit.distanceKm - 3) <= 0.5, `expected a circuit within ±0.5 km of 3 km, received ${passeigAiguesCircuit.distanceKm} km`);
+  assert.deepEqual(vistaRicaCircuit.coordinates[0], vistaRicaCircuit.coordinates.at(-1), "a circuit must return to its graph start");
+  const physicalIds = vistaRicaCircuit.edgeIds.map((id) => id.replace(/:(forward|reverse)$/, ""));
+  const sharedFraction = (physicalIds.length - new Set(physicalIds).size) / physicalIds.length;
+  assert.ok(sharedFraction <= 0.30, `expected at most 30% shared access, received ${sharedFraction}`);
+  assert.throws(() => planner.plan("passeig_aigues_parking", 3, true), /No non-retracing circuit/, "the planner must reject a long retracing route rather than call it a loop");
 });

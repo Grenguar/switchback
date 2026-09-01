@@ -121,7 +121,7 @@ test("loadTrailPack loads every static tile and the planner joins a shared bound
   }
 });
 
-test("published Collserola TrailPack loads every static tile with Barcelona provenance", async () => {
+test("published Collserola TrailPack loads every static tile with official A-E park-network provenance", async () => {
   const publishedManifest = await readFile(new URL("../public/trailpack/manifest.json", import.meta.url), "utf8");
   const fetcher: typeof fetch = async (input) => {
     const path = String(input);
@@ -133,13 +133,15 @@ test("published Collserola TrailPack loads every static tile with Barcelona prov
   };
   const result = await loadTrailPack(fetcher);
   if (result.status !== "ready") throw new Error(result.status === "unavailable" ? result.message : "TrailPack did not finish loading.");
-  assert.equal(result.manifest.region_id, "es-ct-collserola-vallvidrera");
-  assert.equal(result.manifest.tiles.length, 33);
+  assert.equal(result.manifest.region_id, "es-ct-collserola");
+  assert.equal(result.manifest.tiles.length, 66);
   assert.equal(result.manifest.sources[0]?.id, "osm-barcelona-bbbike");
-  assert.equal(Object.keys(result.artifact.tiles).length, 33);
+  assert.equal(result.manifest.sources[1]?.id, "collserola-public-network");
+  assert.equal(Object.keys(result.artifact.tiles).length, 66);
   const planner = new TrailPlanner(result.artifact);
   const vistaRicaCircuit = planner.plan("vista_rica_parking", 7, true);
   assert.ok(Math.abs(vistaRicaCircuit.distanceKm - 7) <= 0.5, `expected a circuit within ±0.5 km of 7 km, received ${vistaRicaCircuit.distanceKm} km`);
+  assert.ok(vistaRicaCircuit.waymarkedPercent > 0, "expected the preferred circuit to use official marked paths");
   const passeigAiguesCircuit = planner.plan("passeig_aigues_parking", 3, true);
   assert.ok(Math.abs(passeigAiguesCircuit.distanceKm - 3) <= 0.5, `expected a circuit within ±0.5 km of 3 km, received ${passeigAiguesCircuit.distanceKm} km`);
 });

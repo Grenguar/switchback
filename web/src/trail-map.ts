@@ -1,4 +1,4 @@
-import { GeoJSONSource, LngLatBounds, Map as MapLibreMap, NavigationControl } from "maplibre-gl";
+import { GeoJSONSource, LngLatBounds, Map as MapLibreMap, NavigationControl, Popup } from "maplibre-gl";
 import type { PlannedRoute, StartDefinition } from "./planner";
 import { mapConfiguration } from "./map-config";
 import type { TrailPackArtifact } from "./trailpack";
@@ -13,6 +13,11 @@ type StartFeature = {
   type: "Feature";
   properties: Record<string, never>;
   geometry: { type: "Point"; coordinates: [number, number] };
+};
+
+type OfficialNetwork = {
+  type: "FeatureCollection";
+  features: Array<{ type: "Feature"; properties: { code: string; name: string; source: string }; geometry: { type: "LineString"; coordinates: Array<[number, number]> } }>;
 };
 
 const routeFeature = (route: PlannedRoute): RouteFeature => ({
@@ -36,6 +41,7 @@ export class TrailMap {
   private artifact: TrailPackArtifact | undefined;
   private route: PlannedRoute | undefined;
   private selectedStart: StartDefinition | undefined;
+  private officialNetwork: OfficialNetwork | undefined;
   private loaded = false;
   private readonly map: MapLibreMap;
 
@@ -59,12 +65,13 @@ export class TrailMap {
     });
     this.map.addControl(new NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), "top-left");
     this.map.on("load", () => { this.loaded = true; this.sync(); });
-    this.map.on("style.load", () => { this.loaded = true; this.sync(); });
+    this.map.on("style.load", () => { this.loaded = true; this.sync(); this.addOfficialNetwork(); });
     this.map.on("error", () => {
       if (mapConfiguration.provider === "amazon-location") {
         this.status.textContent = "Amazon Location map could not load. Check the deployed key and its allowed referrer.";
       }
     });
+    void this.loadOfficialNetwork();
     this.renderStatus();
   }
 
@@ -98,9 +105,10 @@ export class TrailMap {
 
   private renderStatus(): void {
     const graph = this.artifact ? " TrailPack routes stay local." : "";
+    const official = this.officialNetwork ? ` ${this.officialNetwork.features.length} official A–E path segments loaded.` : "";
     this.status.textContent = mapConfiguration.provider === "amazon-location"
-      ? `Amazon Location terrain and contours.${graph}`
-      : `OpenStreetMap fallback.${graph} Add the scoped Amazon Location key to enable the terrain map.`;
+      ? `Amazon Location terrain and contours.${official}${graph}`
+      : `OpenStreetMap fallback.${official}${graph} Add the scoped Amazon Location key to enable the terrain map.`;
   }
 
   private sync(): void {
@@ -130,6 +138,36 @@ export class TrailMap {
   private hideRoute(): void {
     if (this.map.getLayer("switchback-route-casing")) this.map.setLayoutProperty("switchback-route-casing", "visibility", "none");
     if (this.map.getLayer("switchback-route")) this.map.setLayoutProperty("switchback-route", "visibility", "none");
+  }
+
+  private async loadOfficialNetwork(): Promise<void> {
+    try {
+      const response = await fetch("/trailpack/collserola-official-network-a-e.geojson", { cache: "force-cache" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const network = await response.json() as OfficialNetwork;
+      if (network.type !== "FeatureCollection" || !Array.isArray(network.features) || network.features.length === 0) throw new Error("invalid feature collection");
+      this.officialNetwork = network;
+      if (this.loaded) this.addOfficialNetwork();
+      this.renderStatus();
+    } catch {
+      this.status.textContent = "Official marked-path overlay could not load. TrailPack routing remains available.";
+    }
+  }
+
+  private addOfficialNetwork(): void {
+    if (!this.officialNetwork || this.map.getSource("official-network")) return;
+    const beforeRoute = this.map.getLayer("switchback-route-casing") ? "switchback-route-casing" : undefined;
+    this.map.addSource("official-network", { type: "geojson", data: this.officialNetwork });
+    this.map.addLayer({ id: "official-network-line", type: "line", source: "official-network", paint: { "line-color": "#315c48", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1, 14, 2.2, 17, 3.2], "line-opacity": 0.78 } }, beforeRoute);
+    this.map.addLayer({ id: "official-network-hit", type: "line", source: "official-network", paint: { "line-color": "#315c48", "line-width": 18, "line-opacity": 0 } }, beforeRoute);
+    this.map.addLayer({ id: "official-network-code", type: "symbol", source: "official-network", minzoom: 12.7, layout: { "symbol-placement": "line", "text-field": ["get", "code"], "text-font": ["Noto Sans Regular"], "text-size": 10, "symbol-spacing": 430, "text-keep-upright": true }, paint: { "text-color": "#173328", "text-halo-color": "#edf0e5", "text-halo-width": 1.25 } }, beforeRoute);
+    this.map.on("mouseenter", "official-network-hit", () => { this.map.getCanvas().style.cursor = "pointer"; });
+    this.map.on("mouseleave", "official-network-hit", () => { this.map.getCanvas().style.cursor = "grab"; });
+    this.map.on("click", "official-network-hit", (event) => {
+      const properties = event.features?.[0]?.properties;
+      if (!properties?.code || !properties.name) return;
+      new Popup({ closeButton: false, offset: 10 }).setLngLat(event.lngLat).setText(`${properties.code} · ${properties.name}`).addTo(this.map);
+    });
   }
 
   private placeStartMarker(start: Pick<StartDefinition, "latitude" | "longitude">): void {

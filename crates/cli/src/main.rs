@@ -31,6 +31,9 @@ const MAX_DEMO_NODES: usize = 40_000;
 const DEFAULT_TILE_ZOOM: u8 = 14;
 const OFFICIAL_MATCH_DISTANCE_M: f64 = 20.0;
 const OFFICIAL_MATCH_BEARING_DEGREES: f64 = 30.0;
+// 0.005° is roughly 550 m in this region. The index only selects candidate
+// OSM edges; the matcher still applies the exact 20 m acceptance gate.
+const OFFICIAL_MATCH_INDEX_CELL_DEGREES: f64 = 0.005;
 
 fn main() -> ExitCode {
     let arguments: Vec<_> = env::args().skip(1).collect();
@@ -41,7 +44,7 @@ fn main() -> ExitCode {
         }
         Err(error) => {
             eprintln!(
-                "error: {error}\nusage: switchback-cli <coverage|density|match-metrics|inspect-cnig|inspect-osm> <local-file>\n       switchback-cli build-demo --osm <tarragona.osm.pbf> --cnig <official.kml> [--cnig <official.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output <web/public/trailpack/tarragona-demo.json> --built-at <RFC3339> --extract-date <YYYY-MM-DD>\n       switchback-cli build-tiles --osm <region.osm.pbf> --cnig <official.kml> [--cnig <official.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output-dir <web/public/trailpack> --built-at <RFC3339> --extract-date <YYYY-MM-DD> [--tile-zoom <0..22>]"
+                "error: {error}\nusage: switchback-cli <coverage|density|match-metrics|inspect-cnig|inspect-osm> <local-file>\n       switchback-cli build-demo --osm <tarragona.osm.pbf> --cnig <official.kml> [--cnig <official.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output <web/public/trailpack/tarragona-demo.json> --built-at <RFC3339> --extract-date <YYYY-MM-DD>\n       switchback-cli build-tiles --osm <region.osm.pbf> (--cnig <official.kml> | --official-network <park-network.kml>) [--cnig <official.kml> ...] [--official-network <park-network.kml> ...] --bbox <min_lon,min_lat,max_lon,max_lat> --output-dir <web/public/trailpack> --built-at <RFC3339> --extract-date <YYYY-MM-DD> [--tile-zoom <0..22>]"
             );
             ExitCode::from(2)
         }
@@ -130,6 +133,7 @@ struct BuildDemoArgs {
 #[derive(Debug, Clone, PartialEq)]
 struct BuildTilesArgs {
     build: BuildDemoArgs,
+    official_network_paths: Vec<PathBuf>,
     output_dir: PathBuf,
     tile_zoom: u8,
     region_id: String,
@@ -142,6 +146,7 @@ impl BuildTilesArgs {
     fn parse(args: &[String]) -> Result<Self, String> {
         let mut rewritten = Vec::new();
         let mut output_dir = None;
+        let mut official_network_paths = Vec::new();
         let mut tile_zoom = DEFAULT_TILE_ZOOM;
         let mut region_id = None;
         let mut region_name = None;
@@ -164,6 +169,17 @@ impl BuildTilesArgs {
                 let value = args.get(index).ok_or("--output-dir requires a value")?;
                 index += 1;
                 output_dir = Some(PathBuf::from(value));
+            } else if flag == "--official-network" {
+                let value = args
+                    .get(index)
+                    .ok_or("--official-network requires a value")?;
+                index += 1;
+                official_network_paths.push(PathBuf::from(value));
+                // The bounded KML reader is shared with the existing source
+                // adapter. Provenance is replaced below, so this park network
+                // is never presented as CNIG/FEDME data.
+                rewritten.push("--cnig".into());
+                rewritten.push(value.clone());
             } else if flag == "--region-id" {
                 let value = args.get(index).ok_or("--region-id requires a value")?;
                 index += 1;
@@ -196,6 +212,7 @@ impl BuildTilesArgs {
         rewritten.push(output_dir.join("legacy.json").display().to_string());
         Ok(Self {
             build: BuildDemoArgs::parse(&rewritten)?,
+            official_network_paths,
             output_dir,
             tile_zoom,
             region_id: region_id.unwrap_or_else(|| "es-ct-montsant-prades-demo".into()),
@@ -429,7 +446,7 @@ fn build_tiles(args: &BuildTilesArgs) -> Result<String, String> {
                 .load(args.build.bbox)
                 .map_err(|error| {
                     format!(
-                        "could not load CNIG/FEDME KML `{}` inside the selected bbox: {error}",
+                        "could not load official KML `{}` inside the selected bbox: {error}",
                         path.display()
                     )
                 })?,
@@ -444,6 +461,35 @@ fn build_tiles(args: &BuildTilesArgs) -> Result<String, String> {
         false,
     )?;
     let mut single_tile = single_tile;
+    if !args.official_network_paths.is_empty() {
+        if args.build.cnig_paths.len() != args.official_network_paths.len() {
+            return Err("--official-network cannot be mixed with --cnig: build a separate TrailPack when source classes differ".into());
+        }
+        let source = single_tile
+            .manifest
+            .sources
+            .iter_mut()
+            .find(|source| source.id == "cnig-fedme")
+            .ok_or("internal error: missing official-source provenance")?;
+        *source = Source {
+            id: "collserola-public-network".into(),
+            name: "Collserola Dynamic Public-Use Network (A–E)".into(),
+            licence: "Not stated by publisher".into(),
+            attribution:
+                "© Consorci del Parc Natural de la Serra de Collserola · Xarxa Dinàmica d’Ús Públic"
+                    .into(),
+            extract_date: args.build.extract_date.clone(),
+        };
+        for tile in single_tile.tiles.values_mut() {
+            for edge in &mut tile.edges {
+                if let Some(reference) = &mut edge.official {
+                    reference.source_id = "collserola-public-network".into();
+                    reference.kind = switchback_trailpack::OfficialKind::LocalNetwork;
+                    reference.authority = "Parc Natural de la Serra de Collserola".into();
+                }
+            }
+        }
+    }
     single_tile.manifest.region_id.clone_from(&args.region_id);
     single_tile
         .manifest
@@ -770,6 +816,7 @@ fn matched_official_refs(
             ],
         })
         .collect::<Vec<_>>();
+    let graph_index = official_match_index(&graph);
     let mut traces = official_traces.to_vec();
     traces.sort_by(|left, right| {
         left.ref_code
@@ -788,7 +835,8 @@ fn matched_official_refs(
                 continue;
             }
             evidence.total_trace_length += trace_length_m;
-            let found = match_polyline(trace_segment, &graph, OFFICIAL_MATCH_DISTANCE_M);
+            let candidates = official_match_candidates(trace_segment, &graph, &graph_index);
+            let found = match_polyline(trace_segment, &candidates, OFFICIAL_MATCH_DISTANCE_M);
             let Some(edge_match) = found.matches.first() else {
                 continue;
             };
@@ -833,6 +881,61 @@ fn matched_official_refs(
         }
     }
     (matches, evidence)
+}
+
+fn official_match_index(graph: &[GraphEdge]) -> BTreeMap<(i32, i32), Vec<usize>> {
+    let mut index = BTreeMap::new();
+    for (edge_index, edge) in graph.iter().enumerate() {
+        let [from, to] = edge.geometry.as_slice() else {
+            continue;
+        };
+        let from_cell = official_match_cell(*from);
+        let to_cell = official_match_cell(*to);
+        for latitude in from_cell.0.min(to_cell.0)..=from_cell.0.max(to_cell.0) {
+            for longitude in from_cell.1.min(to_cell.1)..=from_cell.1.max(to_cell.1) {
+                index
+                    .entry((latitude, longitude))
+                    .or_insert_with(Vec::new)
+                    .push(edge_index);
+            }
+        }
+    }
+    index
+}
+
+fn official_match_candidates(
+    trace_segment: &[Point],
+    graph: &[GraphEdge],
+    index: &BTreeMap<(i32, i32), Vec<usize>>,
+) -> Vec<GraphEdge> {
+    let [from, to] = trace_segment else {
+        return Vec::new();
+    };
+    let from_cell = official_match_cell(*from);
+    let to_cell = official_match_cell(*to);
+    let mut edge_indexes = BTreeSet::<usize>::new();
+    // Include the cells around the traced segment. A one-cell margin is much
+    // larger than the 20 m gate, so nearby OSM segments cannot be excluded by
+    // a cell boundary while candidates remain tightly bounded.
+    for latitude in from_cell.0.min(to_cell.0) - 1..=from_cell.0.max(to_cell.0) + 1 {
+        for longitude in from_cell.1.min(to_cell.1) - 1..=from_cell.1.max(to_cell.1) + 1 {
+            if let Some(found) = index.get(&(latitude, longitude)) {
+                edge_indexes.extend(found);
+            }
+        }
+    }
+    edge_indexes
+        .into_iter()
+        .filter_map(|edge_index| graph.get(edge_index).cloned())
+        .collect()
+}
+
+fn official_match_cell((latitude, longitude): Point) -> (i32, i32) {
+    #[allow(clippy::cast_possible_truncation)]
+    let latitude = (latitude / OFFICIAL_MATCH_INDEX_CELL_DEGREES).floor() as i32;
+    #[allow(clippy::cast_possible_truncation)]
+    let longitude = (longitude / OFFICIAL_MATCH_INDEX_CELL_DEGREES).floor() as i32;
+    (latitude, longitude)
 }
 
 fn pedestrian_access_allowed(tags: &RoutingTags) -> bool {

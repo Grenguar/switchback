@@ -93,7 +93,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .maplibregl-ctrl-group { overflow: hidden; border: 1px solid rgba(23, 51, 40, .35); border-radius: 4px; box-shadow: 0 2px 8px rgba(23, 51, 40, .18); }
 .maplibregl-ctrl-group button { width: 44px; height: 44px; }
 .map-key { z-index: 3; right: auto; bottom: 14px; left: 14px; max-width: calc(100% - 28px); padding: 7px 9px; font-size: .58rem; }
-.map-key > span:last-child { display: none; }
+.official-network-key { color: #315c48; }
+.map-key > #map-data-label { display: none; }
+.network-swatch { border-top-width: 3px; border-top-color: #315c48; }
 .route-card { position: static; z-index: auto; width: auto; margin: 0; padding: 19px 21px 21px; border-top: 1px solid #afbdab; box-shadow: none; }
 .route-card h2 { max-width: 540px; }
 @media (max-width: 760px) {

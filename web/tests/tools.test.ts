@@ -95,11 +95,12 @@ test("plan_route renders a directed TrailPack loop before returning", async () =
   await assert.rejects(() => tool.execute({ start: "vista_rica_parking", target_km: 31, prefer_waymarked: true }), /whole or half kilometre/);
   await assert.rejects(() => tool.execute({ start: "vista_rica_parking", target_km: 3.2, prefer_waymarked: true }), /whole or half kilometre/);
   const observed: string[] = [];
+  const phases: string[] = [];
   let renderedTarget: number | undefined;
   setPlanTargetRenderer((targetKm) => { renderedTarget = targetKm; });
-  setToolInvocationObserver((name) => observed.push(name));
+  setToolInvocationObserver((name, _input, _result, _error, phase) => { if (name === "plan_route") phases.push(phase); if (phase === "succeeded") observed.push(name); });
   const result = await tool.execute({ start: "vista_rica_parking", target_km: 7, prefer_waymarked: true }) as { rendered: boolean; distance_km: number; official_match_percent: number };
-  assert.equal(result.rendered, true); assert.equal(result.distance_km, 7); assert.equal(result.official_match_percent, 14); assert.equal("waymarked_percent" in result, false); assert.ok(rendered); assert.deepEqual(observed, ["plan_route"]); assert.ok(JSON.stringify(result).length <= 1_500);
+  assert.equal(result.rendered, true); assert.equal(result.distance_km, 7); assert.equal(result.official_match_percent, 14); assert.equal("waymarked_percent" in result, false); assert.ok(rendered); assert.deepEqual(observed, ["plan_route"]); assert.deepEqual(phases, ["started", "succeeded"]); assert.ok(JSON.stringify(result).length <= 1_500);
   assert.equal(renderedTarget, 7);
   const summary = toolContracts.find((candidate) => candidate.name === "get_route_summary"); assert.ok(summary);
   const summaryResult = await summary.execute({}) as { notable_segments: Array<Record<string, unknown>> };

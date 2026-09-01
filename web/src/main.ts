@@ -18,6 +18,7 @@ app.innerHTML = `
   <main class="shell">
     <header class="masthead"><a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a><div class="status"><i class="status-dot ${bridge.status}" id="bridge-dot"></i><span id="bridge-label">Checking WebMCP…</span></div><button class="plain-button" id="register" type="button">Check model context</button></header>
     <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p><button class="context-help" id="copy-agent-prompt" type="button">Copy agent test prompt</button><p class="context-help-status" id="copy-agent-prompt-status" role="status" aria-live="polite"></p></div></section>
+    <section class="agent-activity" aria-labelledby="agent-activity-title"><div class="agent-activity-lead"><p class="eyebrow">Shared trail ledger</p><h2 id="agent-activity-title">Nothing happens off-map.</h2><p id="agent-activity-status" role="status" aria-live="polite" aria-atomic="true">Waiting for an agent action. You can also run the same actions yourself.</p></div><div class="agent-current" id="agent-current" data-state="idle"><i aria-hidden="true"></i><div><p id="agent-current-kicker">Ready</p><strong id="agent-current-action">The next route decision will appear here.</strong></div></div><ol class="agent-activity-feed" id="agent-activity-feed" aria-label="Recent agent and page actions"><li class="empty">No action has run in this tab yet.</li></ol></section>
     <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
       <aside class="planner"><div class="section-label"><span>01</span><p>Plan a walk</p></div>
@@ -26,16 +27,22 @@ app.innerHTML = `
       </aside>
     <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive terrain map. Drag to explore; use the zoom controls, scroll wheel, keyboard, or pinch to zoom. Click a start marker to select it, or click an official marked path to identify it."></div><p class="map-description" id="map-description" role="status">Loading the interactive terrain map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">Choose a start</span></span><span class="official-network-key"><i class="network-swatch"></i>Official marked paths A–E</span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a start</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">—</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Choose a start and a verified loop length, then generate a real trail circuit.</p><button class="prepare-gpx" id="prepare-gpx" type="button" hidden>Prepare GPX download <span aria-hidden="true">↓</span></button><button class="check-weather" id="check-weather" type="button" hidden>Check next 3 days <span aria-hidden="true">↗</span></button><button class="prepare-briefing" id="prepare-briefing" type="button" hidden>Prepare family briefing <span aria-hidden="true">↗</span></button><section class="route-weather" id="route-weather" hidden aria-labelledby="weather-title"><p class="eyebrow" id="weather-title">Forecast planning context</p><p id="weather-best"></p><ul id="weather-days"></ul><p class="weather-status" id="weather-status" role="status" aria-live="polite"></p></section><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section><section class="route-briefing" id="route-briefing" hidden aria-labelledby="briefing-title"><p class="eyebrow" id="briefing-title">Share with your group</p><pre id="route-briefing-text"></pre><button class="copy-briefing" id="copy-briefing" type="button">Copy briefing</button><p class="briefing-status" id="briefing-status" role="status" aria-live="polite"></p></section><button class="change-start" id="change-start" type="button">Plan another route</button></article></section>
     </section>
-    <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Ten small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
+    <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Twelve small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
   </main>`;
 
 const log = document.querySelector<HTMLOListElement>("#log");
+const activityFeed = document.querySelector<HTMLOListElement>("#agent-activity-feed");
 const trailMapElement = document.querySelector<HTMLElement>("#trail-map");
 const mapDescription = document.querySelector<HTMLElement>("#map-description");
 const trailMap = trailMapElement && mapDescription ? new TrailMap(trailMapElement, mapDescription, (startId) => setStart(startId as StartId)) : undefined;
 let preparedGpxUrl: string | undefined;
 let routeBriefingText = "";
+let localInvocationDepth = 0;
+let activitySequence = 0;
+const actionLabel: Record<string, string> = {
+  list_circuit_options: "Listing verified loop options", validate_circuit: "Checking a circuit before drawing it", record_session_note: "Writing a visible session note", plan_route: "Planning and drawing the loop", get_route_summary: "Reading the active route", explain_difficulty: "Reviewing route difficulty evidence", explain_segment: "Inspecting a trail segment", avoid_segment: "Replanning around a segment", prepare_gpx: "Preparing the GPX handoff", get_trail_weather: "Comparing the next three forecast days", prepare_route_briefing: "Preparing the group briefing", describe_last_edit: "Reviewing the latest map edit", webmcp_registration: "Checking the WebMCP connection",
+};
 const clearPreparedGpx = (): void => {
   if (preparedGpxUrl) URL.revokeObjectURL(preparedGpxUrl);
   preparedGpxUrl = undefined;
@@ -123,19 +130,64 @@ function renderBridgeStatus(result: { status: BridgeStatus; count: number; messa
 async function checkModelContext(): Promise<void> {
   const button = document.querySelector<HTMLButtonElement>("#register");
   if (button) { button.disabled = true; button.textContent = "Checking…"; }
-  const result = await registerWebMcpTools(true);
-  renderBridgeStatus(result);
-  addLog("webmcp_registration", { requested: true }, result, result.status === "failed" ? result.message : undefined);
-  if (button) button.disabled = false;
+  localInvocationDepth += 1;
+  renderActivity("webmcp_registration", undefined, "started");
+  try {
+    const result = await registerWebMcpTools(true);
+    renderBridgeStatus(result);
+    const error = result.status === "failed" ? result.message : undefined;
+    renderActivity("webmcp_registration", error, error ? "failed" : "succeeded");
+    addLog("webmcp_registration", { requested: true }, result, error);
+  } finally {
+    localInvocationDepth -= 1;
+    if (button) button.disabled = false;
+  }
 }
 const addLog = (name: string, input: unknown, result: unknown, error?: unknown): void => {
   if (!log) return; log.querySelector(".empty")?.remove();
   const item = document.createElement("li"); const sequence = document.createElement("span"); sequence.textContent = String(++logSequence).padStart(2, "0");
   const details = document.createElement("div"); const heading = document.createElement("strong"); heading.textContent = name; const output = document.createElement("code"); output.textContent = error ? `Error: ${error instanceof Error ? error.message : String(error)}` : JSON.stringify({ input, result }); details.append(heading, output); item.append(sequence, details); log.prepend(item);
 };
+const renderActivity = (name: string, error: unknown | undefined, phase: "started" | "succeeded" | "failed"): void => {
+  const current = document.querySelector<HTMLElement>("#agent-current");
+  const kicker = document.querySelector<HTMLElement>("#agent-current-kicker");
+  const action = document.querySelector<HTMLElement>("#agent-current-action");
+  const status = document.querySelector<HTMLElement>("#agent-activity-status");
+  const origin = localInvocationDepth > 0 ? "Your action" : "Agent action";
+  const label = actionLabel[name] ?? name.replaceAll("_", " ");
+  document.querySelectorAll<HTMLElement>(`.tool[data-tool="${name}"]`).forEach((tool) => tool.classList.toggle("is-active", phase === "started"));
+  if (phase === "started") {
+    activityFeed?.querySelector(".empty")?.remove();
+    const item = document.createElement("li");
+    const marker = document.createElement("i"); marker.setAttribute("aria-hidden", "true");
+    const details = document.createElement("div"); const title = document.createElement("strong"); const caption = document.createElement("span");
+    title.textContent = label; caption.textContent = `${origin} · running`;
+    details.append(title, caption); item.append(marker, details); item.id = `agent-activity-${++activitySequence}`; item.dataset.tool = name; item.dataset.state = "running";
+    activityFeed?.prepend(item);
+    while ((activityFeed?.children.length ?? 0) > 4) activityFeed?.lastElementChild?.remove();
+    if (current) current.dataset.state = "running";
+    if (kicker) kicker.textContent = `${origin} in progress`;
+    if (action) action.textContent = label;
+    if (status) status.textContent = `${origin} is ${label.toLowerCase()}.`;
+    return;
+  }
+  const matching = activityFeed?.querySelector<HTMLElement>(`li[data-tool="${name}"][data-state="running"]`);
+  if (matching) {
+    matching.dataset.state = phase === "succeeded" ? "complete" : "failed";
+    const caption = matching.querySelector<HTMLElement>("span");
+    if (caption) caption.textContent = `${origin} · ${phase === "succeeded" ? "complete" : "needs attention"}`;
+  }
+  if (current) current.dataset.state = phase === "succeeded" ? "complete" : "failed";
+  if (kicker) kicker.textContent = phase === "succeeded" ? `${origin} complete` : `${origin} needs attention`;
+  if (action) action.textContent = phase === "succeeded" ? label : error instanceof Error ? error.message : `Could not complete ${label.toLowerCase()}.`;
+  if (status) status.textContent = phase === "succeeded" ? `${origin} completed: ${label.toLowerCase()}.` : `${origin} needs attention: ${error instanceof Error ? error.message : `could not complete ${label.toLowerCase()}`}.`;
+};
 // Browser-agent WebMCP calls and page button calls share this observer, so the
 // visible audit trail does not depend on which surface initiated the action.
-setToolInvocationObserver((name, input, result, error) => addLog(name, input, result, error));
+setToolInvocationObserver((name, input, result, error, phase) => {
+  renderActivity(name, error, phase);
+  if (phase !== "started") addLog(name, input, result, error);
+});
 
 async function renderRoute(route: PlannedRoute): Promise<void> {
   syncPlannerToRoute(route);
@@ -174,7 +226,9 @@ void loadTrailPack().then(renderTrailPack);
 
 async function invoke(name: string, input: Record<string, unknown>): Promise<void> {
   const tool = toolContracts.find((candidate) => candidate.name === name); if (!tool) return;
+  localInvocationDepth += 1;
   try { await tool.execute(input, new AbortController().signal); } catch { /* The shared tool observer already records the failure. */ }
+  finally { localInvocationDepth -= 1; }
 }
 type TransportMode = "car" | "public_transport";
 let selectedTransport: TransportMode = "car";

@@ -5,7 +5,8 @@ import { fetchTrailWeather, type TrailWeather } from "./weather";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
 export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_difficulty" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "get_trail_weather" | "prepare_route_briefing" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
-export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined) => void;
+export type ToolInvocationPhase = "started" | "succeeded" | "failed";
+export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined, phase: ToolInvocationPhase) => void;
 export type PreparedGpx = Readonly<{ filename: string; content: string; exportedPoints: number; originalPoints: number; transitions: ReadonlyArray<Readonly<{ name: string; segmentName: string; latitude: number; longitude: number }>> }>;
 export type GpxRenderer = (prepared: PreparedGpx) => void | Promise<void>;
 export type PreparedRouteBriefing = Readonly<{ title: string; text: string }>;
@@ -304,12 +305,13 @@ const rawToolContracts: ToolContract[] = [
 export const toolContracts: ToolContract[] = rawToolContracts.map((tool) => ({
   ...tool,
   execute: async (input, signal) => {
+    invocationObserver?.(tool.name, input, undefined, undefined, "started");
     try {
       const result = await tool.execute(input, signal);
-      invocationObserver?.(tool.name, input, result, undefined);
+      invocationObserver?.(tool.name, input, result, undefined, "succeeded");
       return result;
     } catch (error) {
-      invocationObserver?.(tool.name, input, undefined, error);
+      invocationObserver?.(tool.name, input, undefined, error, "failed");
       throw error;
     }
   },

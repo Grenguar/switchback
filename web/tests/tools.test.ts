@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, selectableCircuitStartIds, documentedStarts, type PlannedRoute } from "../src/planner";
 import { clearActiveRoute, setGpxRenderer, setParkAlertsRenderer, setPlanTargetRenderer, setRouteBriefingRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, setTrailWeatherRenderer, toolContracts, type PreparedGpx, type PreparedRouteBriefing } from "../src/tools";
+// Netlify runs this plain ESM function module; the parser itself is exercised here.
+// @ts-expect-error Netlify function modules are not part of the browser TypeScript program.
 import { parseActiveAlerts } from "../netlify/functions/park-alerts.mjs";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 

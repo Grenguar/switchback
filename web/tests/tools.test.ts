@@ -19,8 +19,8 @@ const artifact: TrailPackArtifact = {
   ] } },
 };
 
-test("all nine tool contracts are present and have strict object schemas", () => {
-  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_segment", "avoid_segment", "prepare_gpx", "describe_last_edit"]);
+test("all ten tool contracts are present and have strict object schemas", () => {
+  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "describe_last_edit"]);
   for (const tool of toolContracts) { assert.equal(tool.inputSchema.type, "object"); assert.equal(tool.inputSchema.additionalProperties, false); assert.equal(tool.annotations.untrustedContentHint, true); }
 });
 
@@ -77,8 +77,8 @@ test("agent test tools disclose verified targets, dry-run without rendering, and
   const list = toolContracts.find((candidate) => candidate.name === "list_circuit_options"); const validate = toolContracts.find((candidate) => candidate.name === "validate_circuit"); const record = toolContracts.find((candidate) => candidate.name === "record_session_note");
   assert.ok(list); assert.ok(validate); assert.ok(record);
   const options = await list.execute({}) as { options: Array<{ start: string; profiles: string[] }> };
-  assert.deepEqual(options.options.find((option) => option.start === "passeig_aigues_parking")?.profiles, ["easy:2km"]);
-  assert.deepEqual(options.options.find((option) => option.start === "vista_rica_parking")?.profiles, ["easy:2km", "medium:7km", "hard:14km"]);
+  assert.deepEqual(options.options.find((option) => option.start === "passeig_aigues_parking")?.profiles, ["short:2km"]);
+  assert.deepEqual(options.options.find((option) => option.start === "vista_rica_parking")?.profiles, ["short:2km", "medium:7km", "long:14km"]);
   assert.deepEqual(circuitOptionsFor(documentedStarts.can_coll_cerdanyola).map((profile) => profile.targetKm), [2, 5, 14]);
   const dryRun = await validate.execute({ start: "vista_rica_parking", target_km: 7, prefer_waymarked: true }) as { validated: boolean; rendered: boolean; returns_to_start: boolean };
   assert.equal(dryRun.validated, true); assert.equal(dryRun.rendered, false); assert.equal(dryRun.returns_to_start, true); assert.equal(renders, 0);

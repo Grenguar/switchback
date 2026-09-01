@@ -61,7 +61,7 @@ export const selectableCircuitStartIds = Object.entries(documentedStarts)
   .filter(([, start]) => start.circuitStatus === "verified")
   .map(([id]) => id as StartId) as readonly StartId[];
 export const circuitDistancesFor = (start: StartDefinition): readonly number[] => start.circuitDistancesKm ?? [start.recommendedKm];
-export type CircuitProfile = "easy" | "medium" | "hard";
+export type CircuitProfile = "short" | "medium" | "long";
 export type CircuitOption = { targetKm: number; profile: CircuitProfile; label: string; detail: string };
 /**
  * These profiles communicate outing length, not a terrain or safety rating.
@@ -70,7 +70,7 @@ export type CircuitOption = { targetKm: number; profile: CircuitProfile; label: 
 export const circuitOptionsFor = (start: StartDefinition): readonly CircuitOption[] => {
   const distances = circuitDistancesFor(start);
   return distances.map((targetKm, index) => {
-    const profile: CircuitProfile = distances.length === 1 || index === 0 ? "easy" : index === distances.length - 1 ? (distances.length === 2 ? "medium" : "hard") : "medium";
+    const profile: CircuitProfile = distances.length === 1 || index === 0 ? "short" : index === distances.length - 1 ? (distances.length === 2 ? "medium" : "long") : "medium";
     const label = `${profile[0]!.toUpperCase()}${profile.slice(1)} loop`;
     return { targetKm, profile, label, detail: `${targetKm} km graph-verified circuit` };
   });

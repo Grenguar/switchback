@@ -1,8 +1,9 @@
 import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, documentedStarts, selectableCircuitStartIds, type PlannedRoute, type Waypoint } from "./planner";
 import { RouteSession, type WaypointEdit } from "./route-session";
+import { assessRouteDifficulty } from "./difficulty";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
-export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
+export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_difficulty" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
 export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined) => void;
 export type PreparedGpx = Readonly<{ filename: string; content: string; exportedPoints: number; originalPoints: number; transitions: ReadonlyArray<Readonly<{ name: string; segmentName: string; latitude: number; longitude: number }>> }>;
 export type GpxRenderer = (prepared: PreparedGpx) => void | Promise<void>;
@@ -84,7 +85,7 @@ const gpxFor = (route: PlannedRoute): PreparedGpx => {
 
 const rawToolContracts: ToolContract[] = [
   {
-    name: "list_circuit_options", description: "List every selectable Collserola circuit origin, its arrival mode, and its graph-verified easy, medium, or hard distance profiles. Use this before proposing a route.", annotations: readOnly,
+    name: "list_circuit_options", description: "List every selectable Collserola circuit origin, its arrival mode, and graph-verified short, medium, or long distance profiles. These are not difficulty ratings.", annotations: readOnly,
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => {
       only(object(input), []);
@@ -143,6 +144,10 @@ const rawToolContracts: ToolContract[] = [
   {
     name: "get_route_summary", description: "Read the active data-backed route totals and at most five TrailPack segments.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => { only(object(input), []); const route = current(); return abortable(signal, { ...routeOutput(route), notable_segments: route.segments.map(segmentOutput) }); },
+  },
+  {
+    name: "explain_difficulty", description: "Classify the active route against Switchback's easy, moderate, and difficult walking rubric, with its measured ascent, evidence, and missing terrain data.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    execute: async (input, signal) => { only(object(input), []); const route = current(); return abortable(signal, { difficulty: assessRouteDifficulty(route), route_km: route.distanceKm, ascent_m: route.ascentM, source: "ICGC LiDAR sampled ascent plus OSM TrailPack terrain tags", caution: "This is a conservative planning aid, not a field safety assessment." }); },
   },
   {
     name: "explain_segment", description: "Read OSM terrain tags and official-match evidence for a segment of the active route.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, required: ["segment_name"], properties: { segment_name: { type: "string", maxLength: 120, description: "physical_id from get_route_summary.notable_segments." } } },

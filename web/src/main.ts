@@ -6,6 +6,7 @@ import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { TrailMap } from "./trail-map";
 import { registerWebMcpTools, type BridgeStatus } from "./webmcp";
 import { estimateRouteAscent } from "./elevation";
+import { assessRouteDifficulty } from "./difficulty";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing application root.");
@@ -24,7 +25,7 @@ app.innerHTML = `
       </aside>
     <section class="map-panel" id="map-panel" aria-label="Interactive TrailPack route preview"><div class="map-stage"><div class="trail-map" id="trail-map" aria-label="Interactive terrain map. Drag to explore; use the zoom controls, scroll wheel, keyboard, or pinch to zoom. Click a start marker to select it, or click an official marked path to identify it."></div><p class="map-description" id="map-description" role="status">Loading the interactive terrain map.</p><div class="map-key"><span><i class="route-swatch"></i><span id="route-state">Choose a start</span></span><span class="official-network-key"><i class="network-swatch"></i>Official marked paths A–E</span><span id="map-data-label">Data loading</span></div></div><article class="route-card" id="route-card" aria-live="polite"><p class="eyebrow" id="route-kicker">Choose a start</p><h2 id="route-name">Your circuit will appear here</h2><dl><div><dt>Distance</dt><dd id="route-distance">—</dd></div><div><dt>Climb</dt><dd id="route-ascent">—</dd></div><div><dt>Moving time</dt><dd id="route-duration">—</dd></div></dl><p class="route-note" id="route-note">Choose a start and a verified loop length, then generate a real trail circuit.</p><button class="prepare-gpx" id="prepare-gpx" type="button" hidden>Prepare GPX download <span aria-hidden="true">↓</span></button><section class="gpx-export" id="gpx-export" hidden aria-labelledby="gpx-status"><p id="gpx-status" role="status">No GPX prepared.</p><a id="gpx-download" download>Download GPX</a></section><button class="change-start" id="change-start" type="button">Plan another route</button></article></section>
     </section>
-    <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Nine small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
+    <section class="tooling" aria-labelledby="tools-title"><div><p class="eyebrow">Agent surface</p><h2 id="tools-title">Ten small tools.<br>One accountable route.</h2></div><div class="tool-list">${toolContracts.map((tool, index) => `<button class="tool" type="button" data-tool="${tool.name}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${tool.name.replaceAll("_", " ")}</strong><small>${tool.description}</small><b>Run ↗</b></button>`).join("")}</div></section>
     <section class="log-section" aria-labelledby="log-title"><div><p class="eyebrow">Tool invocation log</p><h2 id="log-title">Nothing hidden in the route.</h2></div><ol id="log" class="log"><li class="empty">Choose a route action to inspect its validated input and source-backed output.</li></ol></section>
   </main>`;
 
@@ -85,6 +86,7 @@ const addLog = (name: string, input: unknown, result: unknown, error?: unknown):
 setToolInvocationObserver((name, input, result, error) => addLog(name, input, result, error));
 
 async function renderRoute(route: PlannedRoute): Promise<void> {
+  syncPlannerToRoute(route);
   clearPreparedGpx();
   const prepareGpx = document.querySelector<HTMLButtonElement>("#prepare-gpx");
   if (prepareGpx) prepareGpx.hidden = true;
@@ -93,7 +95,8 @@ async function renderRoute(route: PlannedRoute): Promise<void> {
   if (state) state.textContent = "Checking elevation…"; if (name) name.textContent = route.name; if (distance) distance.textContent = `${route.distanceKm} km`; if (ascent) ascent.textContent = "Estimating…"; if (duration) duration.textContent = `${route.durationHours} h`; if (kicker) kicker.textContent = "Circuit found"; if (note) note.textContent = "Drawing the verified circuit and sampling its terrain profile…";
   trailMap?.setRoute(route);
   route.ascentM = await estimateRouteAscent(route.coordinates);
-  if (state) state.textContent = "Closed circuit"; if (ascent) ascent.textContent = route.ascentM === null ? "Unavailable" : `${route.ascentM} m`; if (kicker) kicker.textContent = "Ready to walk"; if (note) note.textContent = `Returns to your start · ${route.sharedAccessPercent}% shared access · ${route.waymarkedPercent}% marked paths · ${route.ascentM === null ? "elevation unavailable" : `${route.ascentM} m estimated climb (ICGC LiDAR)`}. Check local conditions before you go.`;
+  const assessment = assessRouteDifficulty(route);
+  if (state) state.textContent = "Closed circuit"; if (ascent) ascent.textContent = route.ascentM === null ? "Unavailable" : `${route.ascentM} m`; if (kicker) kicker.textContent = assessment.level === "unrated" ? "Difficulty unrated" : `${assessment.level[0]!.toUpperCase()}${assessment.level.slice(1)} route`; if (note) note.textContent = `${assessment.rationale} ${assessment.limitations}`;
   if (prepareGpx) { prepareGpx.hidden = false; prepareGpx.disabled = false; prepareGpx.innerHTML = `Prepare GPX download <span aria-hidden="true">↓</span>`; }
 }
 setRouteRenderer(renderRoute);
@@ -116,6 +119,14 @@ async function invoke(name: string, input: Record<string, unknown>): Promise<voi
 type TransportMode = "car" | "public_transport";
 let selectedTransport: TransportMode = "car";
 let selectedStart: StartId = "vista_rica_parking";
+function syncPlannerToRoute(route: PlannedRoute): void {
+  selectedStart = route.start.id as StartId; selectedTransport = route.start.transportMode;
+  const targets = circuitDistancesFor(route.start); const target = targets.reduce((closest, candidate) => Math.abs(candidate - route.distanceKm) < Math.abs(closest - route.distanceKm) ? candidate : closest, targets[0]!);
+  const distance = document.querySelector<HTMLInputElement>("#distance"); if (distance) distance.value = String(target);
+  document.querySelectorAll<HTMLButtonElement>(".transport-option").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.transport === selectedTransport)));
+  document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => { button.hidden = button.dataset.transport !== selectedTransport; button.setAttribute("aria-pressed", String(button.dataset.start === selectedStart)); });
+  renderCircuitOptions();
+}
 const renderCircuitOptions = (): void => {
   const options = document.querySelector<HTMLElement>("#circuit-options");
   if (!options) return;
@@ -198,9 +209,9 @@ renderCircuitOptions();
 renderRequestPreview();
 trailMap?.previewStart(documentedStarts[selectedStart]);
 setPlanTargetRenderer(setDistance);
-document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { list_circuit_options: {}, validate_circuit: planInput(), record_session_note: { kind: "test", note: "In-page test recorded from the Switchback tool surface." }, plan_route: planInput(), get_route_summary: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
+document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { list_circuit_options: {}, validate_circuit: planInput(), record_session_note: { kind: "test", note: "In-page test recorded from the Switchback tool surface." }, plan_route: planInput(), get_route_summary: {}, explain_difficulty: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
-const agentTestPrompt = "Use the site tools on this Switchback page. First call list_circuit_options, choose one returned easy, medium, or hard distance profile, then call validate_circuit for that start and target. Record the result with record_session_note. Finally use plan_route for that same option, call get_route_summary, and tell the user the verified distance, closure, and ICGC elevation estimate.";
+const agentTestPrompt = "Use the site tools on this Switchback page. First call list_circuit_options and choose a returned short, medium, or long distance profile; these are not difficulty ratings. Call validate_circuit, then plan_route and get_route_summary. Call explain_difficulty before recommending the route, record the result with record_session_note, and state its evidence and limitations.";
 document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListener("click", async () => {
   const status = document.querySelector<HTMLElement>("#copy-agent-prompt-status");
   try {

@@ -2,9 +2,10 @@ import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, documentedStarts,
 import { RouteSession, type WaypointEdit } from "./route-session";
 import { assessRouteDifficulty } from "./difficulty";
 import { fetchTrailWeather, type TrailWeather } from "./weather";
+import { fetchParkAlerts, type ParkAlerts } from "./park-alerts";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
-export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_difficulty" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "get_trail_weather" | "prepare_route_briefing" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
+export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_difficulty" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "get_trail_weather" | "get_park_alerts" | "prepare_route_briefing" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
 export type ToolInvocationPhase = "started" | "succeeded" | "failed";
 export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined, phase: ToolInvocationPhase) => void;
 export type PreparedGpx = Readonly<{ filename: string; content: string; exportedPoints: number; originalPoints: number; transitions: ReadonlyArray<Readonly<{ name: string; segmentName: string; latitude: number; longitude: number }>> }>;
@@ -12,6 +13,8 @@ export type GpxRenderer = (prepared: PreparedGpx) => void | Promise<void>;
 export type PreparedRouteBriefing = Readonly<{ title: string; text: string }>;
 export type RouteBriefingRenderer = (briefing: PreparedRouteBriefing) => void | Promise<void>;
 export type TrailWeatherRenderer = (forecast: TrailWeather) => void | Promise<void>;
+export type SourceUnavailableRenderer = (message: string) => void | Promise<void>;
+export type ParkAlertsRenderer = (alerts: ParkAlerts) => void | Promise<void>;
 
 const OUTPUT_LIMIT = 1_500;
 const untrusted = { readOnlyHint: false, untrustedContentHint: true };
@@ -25,18 +28,24 @@ let renderPlanTarget: ((targetKm: number) => void | Promise<void>) | undefined;
 let renderGpx: GpxRenderer | undefined;
 let renderRouteBriefing: RouteBriefingRenderer | undefined;
 let renderTrailWeather: TrailWeatherRenderer | undefined;
+let renderTrailWeatherUnavailable: SourceUnavailableRenderer | undefined;
+let renderParkAlerts: ParkAlertsRenderer | undefined;
+let renderParkAlertsUnavailable: SourceUnavailableRenderer | undefined;
 let cachedTrailWeather: { routeId: string; forecast: TrailWeather } | undefined;
+let cachedParkAlerts: ParkAlerts | undefined;
+let weatherAvailability: "not_checked" | "available" | "unavailable" = "not_checked";
+let parkAlertsAvailability: "not_checked" | "available" | "unavailable" = "not_checked";
 let invocationObserver: ToolInvocationObserver | undefined;
 const sessionNotes: Array<{ kind: "test" | "product_insight" | "handoff"; note: string }> = [];
 
 export function setTrailPackProvenance(dataset: string, sources: string[]): void { provenance = { dataset, sources: [...sources] }; }
-export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; }
+export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; weatherAvailability = "not_checked"; }
 /**
  * A new parking origin invalidates the prior circuit everywhere, including
  * read-only WebMCP tools and a pending GPX hand-off. Keeping it explicit
  * prevents a selected car park and an older active route from drifting apart.
  */
-export function clearActiveRoute(): void { activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; }
+export function clearActiveRoute(): void { activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; weatherAvailability = "not_checked"; }
 export function setRouteRenderer(renderer: (route: PlannedRoute) => void | Promise<void>): void { renderRoute = renderer; }
 /** Keeps the visible route brief aligned when an agent, rather than the form, plans a route. */
 export function setPlanTargetRenderer(renderer: ((targetKm: number) => void | Promise<void>) | undefined): void { renderPlanTarget = renderer; }
@@ -46,6 +55,10 @@ export function setGpxRenderer(renderer: GpxRenderer | undefined): void { render
 export function setRouteBriefingRenderer(renderer: RouteBriefingRenderer | undefined): void { renderRouteBriefing = renderer; }
 /** Renders the same limited forecast evidence an agent receives. */
 export function setTrailWeatherRenderer(renderer: TrailWeatherRenderer | undefined): void { renderTrailWeather = renderer; }
+export function setTrailWeatherUnavailableRenderer(renderer: SourceUnavailableRenderer | undefined): void { renderTrailWeatherUnavailable = renderer; }
+/** Reveals official Park notices before an agent summarizes a route. */
+export function setParkAlertsRenderer(renderer: ParkAlertsRenderer | undefined): void { renderParkAlerts = renderer; }
+export function setParkAlertsUnavailableRenderer(renderer: SourceUnavailableRenderer | undefined): void { renderParkAlertsUnavailable = renderer; }
 /** Receives every UI or browser-agent tool call after it settles, without changing its result. */
 export function setToolInvocationObserver(observer: ToolInvocationObserver | undefined): void { invocationObserver = observer; }
 export function getActiveRoute(): PlannedRoute | undefined { return activeRoute; }
@@ -95,11 +108,18 @@ const gpxFor = (route: PlannedRoute): PreparedGpx => {
   return Object.freeze({ filename: "switchback-trailpack-route.gpx", content, exportedPoints: points.length, originalPoints: route.coordinates.length, transitions });
 };
 const weatherLine = (forecast: TrailWeather | undefined): string => {
-  if (!forecast) return "Forecast: not checked. Ask Switchback to compare the next three days before sharing this briefing.";
+  if (!forecast && weatherAvailability === "unavailable") return "Forecast: unavailable when Switchback checked. This recommendation is based on the TrailPack route evidence, not a live forecast. Check a local weather source before departure.";
+  if (!forecast) return "Forecast: not checked. This recommendation is based on the TrailPack route evidence, not a live forecast.";
   const window = forecast.bestWindow;
   return `Forecast (checked ${forecast.checkedAt.slice(0, 10)}): least-exposed forecast window is ${window.date}, ${window.start}–${window.end} (${forecast.timezone}) — ${window.summary}, ${window.temperatureC}°C, ${window.precipitationProbability}% precipitation probability, wind ${window.windKph} km/h and gusts ${window.gustKph} km/h. ${forecast.caution}`;
 };
-const briefingFor = (route: PlannedRoute, forecast: TrailWeather | undefined): PreparedRouteBriefing => {
+const parkAlertsLine = (alerts: ParkAlerts | undefined): string => {
+  if (!alerts && parkAlertsAvailability === "unavailable") return "Official Park alerts: unavailable when Switchback checked. This recommendation is based on TrailPack route evidence and does not confirm current Park restrictions. Open the official alert page before departure.";
+  if (!alerts) return "Official Park alerts: not checked. This recommendation is based on TrailPack route evidence and does not confirm current Park restrictions.";
+  if (alerts.alerts.length === 0) return `Official Park alerts (checked ${alerts.fetchedAt.slice(0, 10)}): no notices were listed in the Park's active-alert section. ${alerts.caution}`;
+  return `Official Park alerts (checked ${alerts.fetchedAt.slice(0, 10)}): ${alerts.alerts.slice(0, 2).map((alert) => `${alert.title} (${alert.published})`).join("; ")}. ${alerts.caution}`;
+};
+const briefingFor = (route: PlannedRoute, forecast: TrailWeather | undefined, alerts: ParkAlerts | undefined): PreparedRouteBriefing => {
   const ascent = route.ascentM === null ? "unavailable" : `${route.ascentM} m estimated ascent`;
   const title = `${route.name} — route briefing`;
   const text = [
@@ -108,6 +128,7 @@ const briefingFor = (route: PlannedRoute, forecast: TrailWeather | undefined): P
     `Plan: ${route.distanceKm} km loop · about ${route.durationHours} h moving time · ${ascent}.`,
     `Trail evidence: ${route.waymarkedPercent}% matched to the Park's published marked-path network.`,
     weatherLine(forecast),
+    parkAlertsLine(alerts),
     "This is a planned route, not proof of current signs, closures, weather, surface, or technical difficulty. Check local conditions before setting out.",
     "Switchback can prepare a GPX for navigation; its download remains a human-controlled click.",
   ].join("\n");
@@ -241,16 +262,46 @@ const rawToolContracts: ToolContract[] = [
     execute: async (input, signal) => {
       only(object(input), []);
       const route = current();
-      const forecast = await fetchTrailWeather(route);
-      cachedTrailWeather = { routeId: route.id, forecast };
-      await renderTrailWeather?.(forecast);
-      const best = forecast.bestWindow;
-      return abortable(signal, {
-        forecast_ready: renderTrailWeather !== undefined, checked_at: forecast.checkedAt, timezone: forecast.timezone, source: forecast.source,
-        best_forecast_window: { date: best.date, time: `${best.start}–${best.end}`, summary: best.summary, temperature_c: best.temperatureC, precipitation_probability_percent: best.precipitationProbability, precipitation_mm: best.precipitationMm, wind_kph: best.windKph, gust_kph: best.gustKph },
-        next_3_days: dailyForecast(forecast), caution: forecast.caution,
-        next_step: "Use the forecast as limited planning context, then post the route briefing in chat. Do not present this as a safety clearance.",
-      });
+      try {
+        const forecast = await fetchTrailWeather(route);
+        cachedTrailWeather = { routeId: route.id, forecast }; weatherAvailability = "available";
+        await renderTrailWeather?.(forecast);
+        const best = forecast.bestWindow;
+        return abortable(signal, {
+          forecast_available: true, forecast_ready: renderTrailWeather !== undefined, checked_at: forecast.checkedAt, timezone: forecast.timezone, source: forecast.source,
+          best_forecast_window: { date: best.date, time: `${best.start}–${best.end}`, summary: best.summary, temperature_c: best.temperatureC, precipitation_probability_percent: best.precipitationProbability, precipitation_mm: best.precipitationMm, wind_kph: best.windKph, gust_kph: best.gustKph },
+          next_3_days: dailyForecast(forecast), caution: forecast.caution,
+          next_step: "Use the forecast as limited planning context, then post the route briefing in chat. Do not present this as a safety clearance.",
+        });
+      } catch (error) {
+        cachedTrailWeather = undefined; weatherAvailability = "unavailable";
+        const message = error instanceof Error ? error.message : "Forecast is temporarily unavailable.";
+        await renderTrailWeatherUnavailable?.(message);
+        return abortable(signal, { forecast_available: false, reason: message, recommendation_basis: "TrailPack route evidence only; no live forecast was available.", next_step: "Continue with the route recommendation only if you state that forecast information is unavailable and ask the user to check a local weather source." });
+      }
+    },
+  },
+  {
+    name: "get_park_alerts", description: "Read the Park's official active-alert list through Switchback's same-origin adapter. It returns notices with their publication dates and source links; it does not decide whether a notice applies to this exact route or remains in force.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    execute: async (input, signal) => {
+      only(object(input), []);
+      try {
+        const alerts = await fetchParkAlerts();
+        cachedParkAlerts = alerts; parkAlertsAvailability = "available";
+        await renderParkAlerts?.(alerts);
+        return abortable(signal, {
+          alerts_available: true, alerts_ready: renderParkAlerts !== undefined, fetched_at: alerts.fetchedAt, source_url: alerts.sourceUrl,
+          active_alert_count: alerts.alerts.length,
+          latest_active_alerts: alerts.alerts.slice(0, 2).map((alert) => ({ title: alert.title, published: alert.published, excerpt: alert.excerpt.slice(0, 160), url: alert.url })),
+          caution: alerts.caution,
+          next_step: "Open the source for any relevant notice and state its uncertainty. Do not treat this list as proof that a notice applies to the route or has expired.",
+        });
+      } catch (error) {
+        cachedParkAlerts = undefined; parkAlertsAvailability = "unavailable";
+        const message = error instanceof Error ? error.message : "Official Park alerts are temporarily unavailable.";
+        await renderParkAlertsUnavailable?.(message);
+        return abortable(signal, { alerts_available: false, source_url: "https://parcnaturalcollserola.cat/actualitat/avisos/", reason: message, recommendation_basis: "TrailPack route evidence only; current Park restrictions could not be checked.", next_step: "Continue only if you clearly say official Park alerts are unavailable and direct the user to open the official alert page before departure." });
+      }
     },
   },
   {
@@ -259,13 +310,14 @@ const rawToolContracts: ToolContract[] = [
       only(object(input), []);
       const route = current();
       const forecast = cachedTrailWeather?.routeId === route.id ? cachedTrailWeather.forecast : undefined;
-      const briefing = briefingFor(route, forecast);
+      const briefing = briefingFor(route, forecast, cachedParkAlerts);
       await renderRouteBriefing?.(briefing);
       return abortable(signal, {
         briefing_ready: renderRouteBriefing !== undefined,
         title: briefing.title,
         briefing: briefing.text,
         forecast_included: forecast !== undefined,
+        park_alerts_included: cachedParkAlerts !== undefined,
         next_step: "Post this briefing, verbatim or concisely, in your chat response. Switchback has revealed a Copy briefing control for the user to review and copy; no message was sent.",
       });
     },

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, selectableCircuitStartIds, documentedStarts, type PlannedRoute } from "../src/planner";
-import { clearActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteBriefingRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, setTrailWeatherRenderer, toolContracts, type PreparedGpx, type PreparedRouteBriefing } from "../src/tools";
+import { clearActiveRoute, setGpxRenderer, setParkAlertsRenderer, setPlanTargetRenderer, setRouteBriefingRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, setTrailWeatherRenderer, toolContracts, type PreparedGpx, type PreparedRouteBriefing } from "../src/tools";
+import { parseActiveAlerts } from "../netlify/functions/park-alerts.mjs";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -19,9 +20,52 @@ const artifact: TrailPackArtifact = {
   ] } },
 };
 
-test("all twelve tool contracts are present and have strict object schemas", () => {
-  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "get_trail_weather", "prepare_route_briefing", "describe_last_edit"]);
+test("all thirteen tool contracts are present and have strict object schemas", () => {
+  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "get_trail_weather", "get_park_alerts", "prepare_route_briefing", "describe_last_edit"]);
   for (const tool of toolContracts) { assert.equal(tool.inputSchema.type, "object"); assert.equal(tool.inputSchema.additionalProperties, false); assert.equal(tool.annotations.untrustedContentHint, true); }
+});
+
+test("Park alert adapter parses only the active official-alert section", () => {
+  const html = `<div id="avisos actius"><div class="tmb "><h3 class="t-entry-title h6"><a href="https://park.test/closure">Access closure</a></h3><p><span class="t-entry-date">setembre 1, 2026</span></p><div class="t-entry-excerpt "><p>Do not enter the affected sector.</p></div></div><div class="tmb "><h3 class="t-entry-title h6"><a href="https://park.test/wind">Wind warning</a></h3><p><span class="t-entry-date">setembre 2, 2026</span></p><div class="t-entry-excerpt "><p>High winds are expected.</p></div></div>Avisos anteriors<div class="tmb "><h3 class="t-entry-title h6"><a href="https://park.test/old">Old notice</a></h3></div>`;
+  assert.deepEqual(parseActiveAlerts(html), [
+    { title: "Access closure", published: "setembre 1, 2026", excerpt: "Do not enter the affected sector.", url: "https://park.test/closure" },
+    { title: "Wind warning", published: "setembre 2, 2026", excerpt: "High winds are expected.", url: "https://park.test/wind" },
+  ]);
+});
+
+test("get_park_alerts returns sourced notices without claiming route applicability", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ source_url: "https://parcnaturalcollserola.cat/actualitat/avisos/", fetched_at: "2026-09-01T10:00:00Z", alerts: [{ title: "Access closure", published: "setembre 1, 2026", excerpt: "Do not enter the affected sector.", url: "https://parcnaturalcollserola.cat/closure" }], caution: "Open the source before departure." }), { status: 200 });
+  try {
+    let rendered = false;
+    setParkAlertsRenderer(() => { rendered = true; });
+    const alerts = toolContracts.find((candidate) => candidate.name === "get_park_alerts"); assert.ok(alerts);
+    const result = await alerts.execute({}) as { alerts_ready: boolean; active_alert_count: number; latest_active_alerts: Array<{ title: string }>; next_step: string };
+    assert.equal(result.alerts_ready, true); assert.equal(result.active_alert_count, 1); assert.equal(result.latest_active_alerts[0]?.title, "Access closure"); assert.match(result.next_step, /applies to the route/); assert.equal(rendered, true); assert.ok(JSON.stringify(result).length <= 1_500);
+  } finally {
+    globalThis.fetch = originalFetch;
+    setParkAlertsRenderer(undefined);
+  }
+});
+
+test("unavailable external sources return availability status without blocking a route recommendation", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 502 });
+  try {
+    setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
+    const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
+    await plan.execute({ start: "vista_rica_parking", target_km: 7, prefer_waymarked: true });
+    const weather = toolContracts.find((candidate) => candidate.name === "get_trail_weather"); const alerts = toolContracts.find((candidate) => candidate.name === "get_park_alerts"); assert.ok(weather); assert.ok(alerts);
+    const weatherResult = await weather.execute({}) as { forecast_available: boolean; recommendation_basis: string };
+    const alertsResult = await alerts.execute({}) as { alerts_available: boolean; recommendation_basis: string };
+    assert.equal(weatherResult.forecast_available, false); assert.match(weatherResult.recommendation_basis, /TrailPack route evidence only/);
+    assert.equal(alertsResult.alerts_available, false); assert.match(alertsResult.recommendation_basis, /TrailPack route evidence only/);
+    const briefingTool = toolContracts.find((candidate) => candidate.name === "prepare_route_briefing"); assert.ok(briefingTool);
+    const briefing = await briefingTool.execute({}) as { briefing: string };
+    assert.match(briefing.briefing, /Forecast: unavailable/); assert.match(briefing.briefing, /Official Park alerts: unavailable/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("get_trail_weather compares three local days and adds limited forecast context to the briefing", async () => {

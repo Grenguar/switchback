@@ -12,6 +12,7 @@
     "avoid_segment",
     "prepare_gpx",
     "get_trail_weather",
+    "get_park_alerts",
     "prepare_route_briefing",
     "describe_last_edit"
   ],
@@ -26,6 +27,7 @@
     "agent_worklog": "record_session_note leaves a visible, local-to-tab record of agent test and handoff work.",
     "route_briefing": "prepare_route_briefing returns an agent-readable handoff and reveals the same reviewable text with a human-controlled copy action.",
     "trail_weather": "get_trail_weather compares three local forecast days, presents an explicit uncertainty caveat, and may be included in the route briefing.",
+    "park_alerts": "get_park_alerts reads the Park's active official-alert section through a same-origin adapter and never infers route applicability or expiry.",
     "limitations": "Unsupported elevation and grade constraints must be rejected rather than estimated."
   }
 }

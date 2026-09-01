@@ -100,6 +100,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .check-weather { width: 100%; min-height: 44px; margin-top: 8px; padding: 10px 12px; color: #173328; background: #dce9a0; border: 1px solid #dce9a0; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
 .check-weather:hover { background: #c4d87f; border-color: #c4d87f; }
 .check-weather:disabled { cursor: wait; opacity: .7; }
+.check-alerts { width: 100%; min-height: 44px; margin-top: 8px; padding: 10px 12px; color: #173328; background: #f2d49c; border: 1px solid #d49a53; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
+.check-alerts:hover { background: #e8bd78; border-color: #b77436; }
+.check-alerts:disabled { cursor: wait; opacity: .7; }
+.park-alerts { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
+.park-alerts .eyebrow { margin-bottom: 8px; color: #80511e; }
+.park-alerts ul { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.park-alerts li { padding: 9px; background: #fff5de; border-left: 3px solid #d49a53; }
+.park-alerts a { display: block; color: #613613; font: 600 .66rem/1.4 'DM Mono', monospace; }
+.park-alerts span, .park-alerts p { display: block; margin: 4px 0 0; color: #6e5738; font-size: .62rem; line-height: 1.45; }
+.park-alerts-status { margin: 9px 0 0; color: #6e5738; font: .61rem/1.45 'DM Mono', monospace; }
 .route-weather { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
 .route-weather .eyebrow { margin-bottom: 8px; }
 .route-weather > p:not(.eyebrow), .route-weather li { color: #315445; font: .62rem/1.5 'DM Mono', monospace; }

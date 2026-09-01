@@ -21,6 +21,12 @@ let invocationObserver: ToolInvocationObserver | undefined;
 
 export function setTrailPackProvenance(dataset: string, sources: string[]): void { provenance = { dataset, sources: [...sources] }; }
 export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; }
+/**
+ * A new parking origin invalidates the prior circuit everywhere, including
+ * read-only WebMCP tools and a pending GPX hand-off. Keeping it explicit
+ * prevents a selected car park and an older active route from drifting apart.
+ */
+export function clearActiveRoute(): void { activeRoute = undefined; routeSession = undefined; }
 export function setRouteRenderer(renderer: (route: PlannedRoute) => void | Promise<void>): void { renderRoute = renderer; }
 /** Keeps the visible route brief aligned when an agent, rather than the form, plans a route. */
 export function setPlanTargetRenderer(renderer: ((targetKm: number) => void | Promise<void>) | undefined): void { renderPlanTarget = renderer; }

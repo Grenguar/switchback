@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { TrailPlanner, type PlannedRoute } from "../src/planner";
-import { setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
+import { clearActiveRoute, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPlanner, toolContracts, type PreparedGpx } from "../src/tools";
 import { loadTrailPack, parseManifest, type TrailPackArtifact, type TrailPackManifest } from "../src/trailpack";
 
 const manifest: TrailPackManifest = {
@@ -69,6 +69,15 @@ test("plan_route renders a directed TrailPack loop before returning", async () =
   assert.equal("official_match" in summaryResult.notable_segments[0]!, true);
   setToolInvocationObserver(undefined);
   setPlanTargetRenderer(undefined);
+});
+
+test("changing a parking origin clears the active route session", async () => {
+  setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
+  const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
+  const summary = toolContracts.find((candidate) => candidate.name === "get_route_summary"); assert.ok(summary);
+  await plan.execute({ start: "vista_rica_parking", target_km: 3, prefer_waymarked: true });
+  clearActiveRoute();
+  await assert.rejects(() => summary.execute({}), /No route has been planned/);
 });
 
 test("planner probe reports snap, closure, distance, and reuse evidence without widening route acceptance", () => {

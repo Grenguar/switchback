@@ -1,6 +1,6 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
-import { documentedStarts, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
+import { clearActiveRoute, documentedStarts, setGpxRenderer, setPlanTargetRenderer, setRouteRenderer, setToolInvocationObserver, setTrailPackProvenance, setTrailPlanner, toolContracts, type PreparedGpx } from "./tools";
 import { TrailPlanner, type PlannedRoute, type StartId } from "./planner";
 import { loadTrailPack, type TrailPackLoadState } from "./trailpack";
 import { TrailMap } from "./trail-map";
@@ -123,22 +123,28 @@ const renderRequestPreview = (): void => {
   if (distance) distance.textContent = `${distanceKm} km`;
   if (duration) duration.textContent = "—";
   if (kicker) kicker.textContent = "Car park selected";
-  if (note) note.textContent = "Generate to draw a trail circuit from this car park.";
+  if (note) note.textContent = start.maxLoopKm < 30
+    ? `This car park has verified non-retracing loops from 1 to ${start.maxLoopKm} km in the current TrailPack.`
+    : "Generate to draw a trail circuit from this car park.";
   trailMap?.clearRoute();
 };
 const setDistance = (requestedKm: number): void => {
-  const distanceKm = Math.min(30, Math.max(1, Math.round(requestedKm * 2) / 2));
+  const maximum = documentedStarts[selectedStart].maxLoopKm;
+  const distanceKm = Math.min(maximum, Math.max(1, Math.round(requestedKm * 2) / 2));
   const distance = document.querySelector<HTMLInputElement>("#distance");
   const value = document.querySelector<HTMLOutputElement>("#distance-value");
-  if (distance) distance.value = String(distanceKm);
+  if (distance) { distance.max = String(maximum); distance.value = String(distanceKm); }
   if (value) value.value = `${distanceKm} km`;
   renderRequestPreview();
 };
 const setStart = (start: StartId): void => {
+  if (start === selectedStart) return;
   selectedStart = start;
+  clearActiveRoute();
   document.querySelectorAll<HTMLButtonElement>(".start-option").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.start === start)));
+  const requested = Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7);
+  setDistance(requested);
   trailMap?.previewStart(documentedStarts[start]);
-  renderRequestPreview();
 };
 const planInput = (): Record<string, unknown> => ({ start: selectedStart, target_km: Number(document.querySelector<HTMLInputElement>("#distance")?.value ?? 7), prefer_waymarked: true });
 document.querySelector<HTMLFormElement>("#plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); void invoke("plan_route", planInput()); });

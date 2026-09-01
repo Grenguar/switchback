@@ -100,7 +100,13 @@ export class TrailMap {
 
   clearRoute(): void {
     this.route = undefined;
-    if (this.loaded) this.hideRoute();
+    if (!this.loaded) return;
+    // Remove old geometry rather than merely hiding it. This prevents an old
+    // orange circuit being retained by the renderer while a new car park is
+    // being previewed or a fresh graph plan is still in progress.
+    if (this.map.getLayer("switchback-route")) this.map.removeLayer("switchback-route");
+    if (this.map.getLayer("switchback-route-casing")) this.map.removeLayer("switchback-route-casing");
+    if (this.map.getSource("switchback-route")) this.map.removeSource("switchback-route");
   }
 
   private renderStatus(): void {

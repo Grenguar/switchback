@@ -6,6 +6,8 @@ export type StartDefinition = {
   latitude: number;
   longitude: number;
   availability: "available" | "unavailable";
+  /** Verified upper bound for a non-retracing loop in this TrailPack build. */
+  maxLoopKm: number;
   description: string;
 };
 
@@ -16,6 +18,7 @@ export const documentedStarts = {
     latitude: 41.431472,
     longitude: 2.126,
     availability: "available",
+    maxLoopKm: 30,
     description: "Car-access trailhead at the Vista Rica parking area on the Arrabassada road, verified 14 m from the Collserola trail graph.",
   },
   passeig_aigues_parking: {
@@ -24,6 +27,7 @@ export const documentedStarts = {
     latitude: 41.41934275457755,
     longitude: 2.1276451494056836,
     availability: "available",
+    maxLoopKm: 3.5,
     description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph.",
   },
 } as const satisfies Record<string, StartDefinition>;

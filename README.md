@@ -5,7 +5,7 @@
 
 **Ask for a loop. See the ground truth.**
 
-Switchback is a WebMCP-native planner for a short, car-accessible or transit-accessible walk in Collserola–Vallvidrera. A person and an agent work on the same map: the agent discovers site tools, chooses a graph-verified circuit, explains its evidence and limits, and leaves the resulting route visible for the person to inspect and export.
+Switchback is a WebMCP-native planner for a short, car-accessible or transit-accessible walk in Collserola–Vallvidrera. A person and an agent work on the same map: the agent discovers site tools, chooses a graph-verified circuit, checks available forecast and Park-alert context, and leaves the resulting route visible for the person to inspect, brief to friends, and export.
 
 **Live demo:** [switchback-mvp-igor.netlify.app](https://switchback-mvp-igor.netlify.app)
 
@@ -24,18 +24,18 @@ The app registers thirteen browser-native WebMCP tools:
 1. List graph-verified circuit choices.
 2. Dry-run a circuit before altering the map.
 3. Record a visible session note.
-4. Plan and render a closed circuit.
+4. Plan and render a closed circuit, with conversational live-context checks.
 5. Summarize the active route.
 6. Explain the route’s difficulty evidence and gaps.
 7. Explain a TrailPack segment.
 8. Avoid a segment and replan without silently changing a failed route.
 9. Prepare a full-resolution GPX handoff.
 10. Compare the next three local forecast days and identify a limited, least-exposed daytime window.
-11. Read the Park's official active-alert list, retaining its publication dates and source links.
-12. Prepare a reviewable, copyable briefing for a family or group chat (with forecast and Park alerts when checked).
+11. Read the Park's official active-alert list, retaining original Catalan, source links, and optional English machine translations.
+12. Prepare a reviewable, copyable briefing for a family / friends chat (with forecast and Park alerts when checked).
 13. Describe the last accepted map edit.
 
-For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. The agent must explicitly choose to call tools; the app shows whether a browser model context is connected.
+For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. `plan_route` automatically gathers the non-blocking forecast and alert context in a browser; other actions remain explicit and inspectable. The app always shows whether a browser model context is connected.
 
 ## Honest route evidence
 
@@ -45,17 +45,14 @@ Length profiles are **Short / Medium / Long**, never difficulty labels. `explain
 
 The current TrailPack does **not** prove current signs, closures, weather, surface condition, obstacles, exposure, grade, or technical difficulty. Park marked-path preference is evidence from the published network, not a statement of present-day waymarking. Check local conditions before departure.
 
-### Optional Park-alert translations
+### Live context and translations
 
-The `/api/park-alerts` Netlify function always returns the Park's original Catalan notices. When these server-only variables are set in Netlify Functions, it additionally renders an English machine translation under each notice:
-
-```text
-SWITCHBACK_TRANSLATE_REGION=eu-west-1
-SWITCHBACK_TRANSLATE_ACCESS_KEY_ID=...
-SWITCHBACK_TRANSLATE_SECRET_ACCESS_KEY=...
-```
-
-Use an IAM identity limited to `translate:TranslateText`; do not use `VITE_` names. Translation is optional: a missing or failed AWS call leaves the Catalan source notice visible. The endpoint is rate-limited to 20 requests per IP per minute to protect the Park source and translation spend.
+The route page compares the next three forecast days, reads the Park's active
+official notices, and displays the original Catalan plus a clearly labelled
+English machine translation. All of this is optional planning context: missing
+or failed sources leave the graph-verified route intact and clearly marked as
+TrailPack-only. The Park endpoint is server-side and rate-limited to 20
+requests/IP/minute. See [operations and configuration](docs/OPERATIONS.md).
 
 ## Run locally
 
@@ -89,7 +86,10 @@ To rebuild the official overlay and tiles, follow the commands and source notes 
 
 Useful supporting material:
 
-- [WebMCP demo walkthrough](docs/DEMO.md)
+- [How WebMCP works and complete tool reference](docs/WEBMCP.md)
+- [Operations, live data, translations, and safety boundaries](docs/OPERATIONS.md)
+- [Submission video script](docs/VIDEO-SCRIPT.md)
+- [Short demo walkthrough](docs/DEMO.md)
 - [MVP evaluation evidence](docs/MVP-EVALUATION.md)
 - [Apache-2.0 license](LICENSE)
 

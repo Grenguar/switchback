@@ -39,13 +39,13 @@ let invocationObserver: ToolInvocationObserver | undefined;
 const sessionNotes: Array<{ kind: "test" | "product_insight" | "handoff"; note: string }> = [];
 
 export function setTrailPackProvenance(dataset: string, sources: string[]): void { provenance = { dataset, sources: [...sources] }; }
-export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; weatherAvailability = "not_checked"; }
+export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; cachedParkAlerts = undefined; weatherAvailability = "not_checked"; parkAlertsAvailability = "not_checked"; }
 /**
  * A new parking origin invalidates the prior circuit everywhere, including
  * read-only WebMCP tools and a pending GPX hand-off. Keeping it explicit
  * prevents a selected car park and an older active route from drifting apart.
  */
-export function clearActiveRoute(): void { activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; weatherAvailability = "not_checked"; }
+export function clearActiveRoute(): void { activeRoute = undefined; routeSession = undefined; cachedTrailWeather = undefined; cachedParkAlerts = undefined; weatherAvailability = "not_checked"; parkAlertsAvailability = "not_checked"; }
 export function setRouteRenderer(renderer: (route: PlannedRoute) => void | Promise<void>): void { renderRoute = renderer; }
 /** Keeps the visible route brief aligned when an agent, rather than the form, plans a route. */
 export function setPlanTargetRenderer(renderer: ((targetKm: number) => void | Promise<void>) | undefined): void { renderPlanTarget = renderer; }
@@ -142,6 +142,49 @@ const dailyForecast = (forecast: TrailWeather): Array<Pick<TrailWeather["bestWin
   }
   return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).map(({ date, start, end, summary, temperatureC, precipitationProbability, precipitationMm, windKph, gustKph }) => ({ date, start, end, summary, temperatureC, precipitationProbability, precipitationMm, windKph, gustKph }));
 };
+type WeatherContext = Readonly<{ available: true; forecast: TrailWeather }> | Readonly<{ available: false; reason: string }>;
+type ParkAlertsContext = Readonly<{ available: true; alerts: ParkAlerts }> | Readonly<{ available: false; reason: string }>;
+
+const loadWeatherContext = async (route: PlannedRoute): Promise<WeatherContext> => {
+  try {
+    const forecast = await fetchTrailWeather(route);
+    cachedTrailWeather = { routeId: route.id, forecast }; weatherAvailability = "available";
+    await renderTrailWeather?.(forecast);
+    return { available: true, forecast };
+  } catch (error) {
+    cachedTrailWeather = undefined; weatherAvailability = "unavailable";
+    const reason = error instanceof Error ? error.message : "Forecast is temporarily unavailable.";
+    await renderTrailWeatherUnavailable?.(reason);
+    return { available: false, reason };
+  }
+};
+
+const loadParkAlertsContext = async (): Promise<ParkAlertsContext> => {
+  try {
+    const alerts = await fetchParkAlerts();
+    cachedParkAlerts = alerts; parkAlertsAvailability = "available";
+    await renderParkAlerts?.(alerts);
+    return { available: true, alerts };
+  } catch (error) {
+    cachedParkAlerts = undefined; parkAlertsAvailability = "unavailable";
+    const reason = error instanceof Error ? error.message : "Official Park alerts are temporarily unavailable.";
+    await renderParkAlertsUnavailable?.(reason);
+    return { available: false, reason };
+  }
+};
+
+const conversationalRouteReply = (route: PlannedRoute, weather: WeatherContext, alerts: ParkAlertsContext): string => {
+  const routeLine = `I found a ${route.distanceKm} km loop from ${route.start.name} with ${route.ascentM ?? "unavailable"} m estimated ascent.`;
+  const weatherLine = weather.available
+    ? `The least-exposed forecast window is ${weather.forecast.bestWindow.date}, ${weather.forecast.bestWindow.start}–${weather.forecast.bestWindow.end}: ${weather.forecast.bestWindow.summary}, ${weather.forecast.bestWindow.temperatureC}°C, ${weather.forecast.bestWindow.precipitationProbability}% precipitation probability, and gusts ${weather.forecast.bestWindow.gustKph} km/h.`
+    : "I could not refresh the forecast, so I would treat the route recommendation as TrailPack-only planning evidence.";
+  const alertsLine = alerts.available
+    ? alerts.alerts.alerts.length === 0
+      ? "The Park's active-alert section listed no notices when I checked."
+      : `The Park's active-alert section has ${alerts.alerts.alerts.length} notice${alerts.alerts.alerts.length === 1 ? "" : "s"}; I have shown the latest notices on the shared page.`
+    : "I could not refresh the Park's official alert list, so current restrictions are unconfirmed.";
+  return `${routeLine} ${weatherLine} ${alertsLine} Want me to prepare a family / friends briefing or a GPX next?`;
+};
 
 const rawToolContracts: ToolContract[] = [
   {
@@ -178,7 +221,7 @@ const rawToolContracts: ToolContract[] = [
     },
   },
   {
-    name: "plan_route", description: "Plan and render a genuine Collserola circuit from a selectable car or public-transport origin. Every listed start has a small set of graph-verified target distances; use only its published values, returned in errors when needed. This prevents a non-loop target such as 3 km from Passeig de les Aigües. The pack excludes urban footways and paved access roads. An ICGC LiDAR-based ascent estimate is added after rendering.", annotations: untrusted,
+    name: "plan_route", description: "Plan and render a genuine Collserola circuit, then automatically check the next-three-day forecast and official Park alerts for a conversational, source-labelled recommendation. Either live source can be unavailable without invalidating the graph-verified route. Every listed start has a small set of graph-verified target distances; use only its published values, returned in errors when needed. The pack excludes urban footways and paved access roads. An ICGC LiDAR-based ascent estimate is added after rendering.", annotations: untrusted,
     inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: selectableCircuitStartIds, description: "Verified circuit origin. Use arrival_mode to choose car or public transport; the enum contains all currently selectable origins." }, arrival_mode: { type: "string", enum: ["car", "public_transport"], description: "Optional arrival context. When supplied, it must agree with the chosen origin." }, target_km: { type: "number", minimum: 1, maximum: 30, multipleOf: 0.5, description: "Desired circuit distance in 0.5 km steps, from 1 through 30. A result is accepted only within ±0.5 km." }, prefer_waymarked: { type: "boolean", description: "Bias toward the Park’s published A–E marked-path network while retaining OSM trail connectors needed to close a loop. It does not confirm present-day conditions." }, max_ascent_m: { type: "number", description: "Unsupported at plan-selection time; ascent is estimated after the route has rendered." }, max_grade: { type: "string", description: "Unsupported: this TrailPack has incomplete grade tags." } } },
     execute: async (input, signal) => {
       const data = object(input); only(data, ["start", "arrival_mode", "target_km", "prefer_waymarked", "max_ascent_m", "max_grade"]);
@@ -198,7 +241,20 @@ const rawToolContracts: ToolContract[] = [
       await renderRoute?.(next);
       activeRoute = next;
       routeSession = new RouteSession(next, targetKm);
-      return abortable(signal, { ...routeOutput(next), requested: { start, target_km: targetKm, prefer_waymarked: data.prefer_waymarked }, rendered: true, note: "Directed graph loop rendered from the loaded TrailPack. Verify current local conditions before departure." });
+      // WebMCP runs in the browser: enrich its first route answer with the two
+      // live planning sources so a natural-language request does not depend on
+      // the model remembering a separate tool checklist. Node contract tests
+      // intentionally exercise the graph-only core without browser I/O.
+      const liveContext = typeof window === "undefined" ? undefined : await Promise.all([loadWeatherContext(next), loadParkAlertsContext()]);
+      const [weather, alerts] = liveContext ?? [];
+      return abortable(signal, {
+        ...routeOutput(next), requested: { start, target_km: targetKm, prefer_waymarked: data.prefer_waymarked }, rendered: true,
+        live_context_checked: liveContext !== undefined,
+        forecast_available: weather?.available ?? false,
+        park_alerts_available: alerts?.available ?? false,
+        chat_reply: weather && alerts ? conversationalRouteReply(next, weather, alerts) : "I found and rendered the graph-verified loop. In a WebMCP browser, I also check forecast and Park alerts before suggesting a day.",
+        note: "Directed graph loop rendered from the loaded TrailPack. Live forecast and official Park alerts are planning context, not a safety clearance.",
+      });
     },
   },
   {
@@ -262,10 +318,9 @@ const rawToolContracts: ToolContract[] = [
     execute: async (input, signal) => {
       only(object(input), []);
       const route = current();
-      try {
-        const forecast = await fetchTrailWeather(route);
-        cachedTrailWeather = { routeId: route.id, forecast }; weatherAvailability = "available";
-        await renderTrailWeather?.(forecast);
+      const context = await loadWeatherContext(route);
+      if (context.available) {
+        const forecast = context.forecast;
         const best = forecast.bestWindow;
         return abortable(signal, {
           forecast_available: true, forecast_ready: renderTrailWeather !== undefined, checked_at: forecast.checkedAt, timezone: forecast.timezone, source: forecast.source,
@@ -273,22 +328,17 @@ const rawToolContracts: ToolContract[] = [
           next_3_days: dailyForecast(forecast), caution: forecast.caution,
           next_step: "Use the forecast as limited planning context, then post the route briefing in chat. Do not present this as a safety clearance.",
         });
-      } catch (error) {
-        cachedTrailWeather = undefined; weatherAvailability = "unavailable";
-        const message = error instanceof Error ? error.message : "Forecast is temporarily unavailable.";
-        await renderTrailWeatherUnavailable?.(message);
-        return abortable(signal, { forecast_available: false, reason: message, recommendation_basis: "TrailPack route evidence only; no live forecast was available.", next_step: "Continue with the route recommendation only if you state that forecast information is unavailable and ask the user to check a local weather source." });
       }
+      return abortable(signal, { forecast_available: false, reason: context.reason, recommendation_basis: "TrailPack route evidence only; no live forecast was available.", next_step: "Continue with the route recommendation only if you state that forecast information is unavailable and ask the user to check a local weather source." });
     },
   },
   {
     name: "get_park_alerts", description: "Read the Park's official active-alert list through Switchback's same-origin adapter. It returns notices with their publication dates and source links; it does not decide whether a notice applies to this exact route or remains in force.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => {
       only(object(input), []);
-      try {
-        const alerts = await fetchParkAlerts();
-        cachedParkAlerts = alerts; parkAlertsAvailability = "available";
-        await renderParkAlerts?.(alerts);
+      const context = await loadParkAlertsContext();
+      if (context.available) {
+        const alerts = context.alerts;
         return abortable(signal, {
           alerts_available: true, alerts_ready: renderParkAlerts !== undefined, fetched_at: alerts.fetchedAt, source_url: alerts.sourceUrl,
           active_alert_count: alerts.alerts.length,
@@ -296,16 +346,12 @@ const rawToolContracts: ToolContract[] = [
           caution: alerts.caution,
           next_step: "Open the source for any relevant notice and state its uncertainty. Do not treat this list as proof that a notice applies to the route or has expired.",
         });
-      } catch (error) {
-        cachedParkAlerts = undefined; parkAlertsAvailability = "unavailable";
-        const message = error instanceof Error ? error.message : "Official Park alerts are temporarily unavailable.";
-        await renderParkAlertsUnavailable?.(message);
-        return abortable(signal, { alerts_available: false, source_url: "https://parcnaturalcollserola.cat/actualitat/avisos/", reason: message, recommendation_basis: "TrailPack route evidence only; current Park restrictions could not be checked.", next_step: "Continue only if you clearly say official Park alerts are unavailable and direct the user to open the official alert page before departure." });
       }
+      return abortable(signal, { alerts_available: false, source_url: "https://parcnaturalcollserola.cat/actualitat/avisos/", reason: context.reason, recommendation_basis: "TrailPack route evidence only; current Park restrictions could not be checked.", next_step: "Continue only if you clearly say official Park alerts are unavailable and direct the user to open the official alert page before departure." });
     },
   },
   {
-    name: "prepare_route_briefing", description: "Prepare a concise, copyable route briefing for a family or group chat and reveal the same text in the page for the person to review. It never sends a message or accesses a messaging account.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    name: "prepare_route_briefing", description: "Prepare a concise, copyable route briefing for a family or friends chat and reveal the same text in the page for the person to review. It never sends a message or accesses a messaging account.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: {} },
     execute: async (input, signal) => {
       only(object(input), []);
       const route = current();

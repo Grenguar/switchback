@@ -43,6 +43,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .gpx-export a { display: inline-flex; align-items: center; min-height: 44px; padding: 9px 11px; color: #edf0e5; background: #173328; font: 600 .65rem 'DM Mono', monospace; text-decoration: none; text-transform: uppercase; letter-spacing: .07em; }
 .gpx-export a:hover { background: #315c48; }
 .gpx-export a:focus-visible { outline-color: #173328; }
+.change-start { width: 100%; min-height: 44px; margin-top: 14px; padding: 10px 12px; color: #173328; background: transparent; border: 1px solid #607a6d; font: 600 .67rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .07em; }
+.change-start:hover { color: #edf0e5; background: #173328; border-color: #173328; }
 @media (max-width: 760px) { .masthead { height: auto; min-height: 70px; gap: 12px; } }
 
 /* A trailhead-first planner: clear choices, one primary action, no hidden units. */
@@ -83,11 +85,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .start-option { min-height: 0; padding: 11px 12px; }
 .start-option small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .distance-heading { display: flex; align-items: baseline; justify-content: space-between; }
-.distance-heading output { color: #dce9a0; font: 700 1.25rem Manrope, sans-serif; }
+.distance-unit { color: #aac0b4; font: .62rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
 .distance-control { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 10px; align-items: center; }
 .distance-control button { width: 44px; height: 44px; color: #edf0e5; background: transparent; border: 1px solid #607a6d; border-radius: 50%; font-size: 1.35rem; line-height: 1; }
 .distance-control button:hover { color: #173328; background: #dce9a0; border-color: #dce9a0; }
-.distance-control input[type=range] { min-width: 0; }
+.distance-control button:disabled { cursor: not-allowed; opacity: .38; }
+.distance-control button:disabled:hover { color: #edf0e5; background: transparent; border-color: #607a6d; }
+.distance-entry { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; color: #173328; background: #edf0e5; border: 1px solid #edf0e5; border-radius: 4px; }
+.distance-entry input[type=number] { width: 5ch; min-height: 0; margin: 0; padding: 0; color: inherit; text-align: right; background: transparent; border: 0; outline: 0; font: 700 1.35rem Manrope, sans-serif; }
+.distance-entry input[readonly] { cursor: default; }
+.distance-entry span { color: #315c48; font: 600 .7rem 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
+.distance-entry:focus-within { outline: 3px solid #b7cf5c; outline-offset: 2px; }
 .planner .plan-button { width: 100%; min-height: 56px; font-size: 1rem; }
 .planner form > .field-hint { margin: -12px 0 0; }
 

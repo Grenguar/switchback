@@ -1,8 +1,8 @@
-import { TrailPlanner, documentedStarts, selectableCircuitStartIds, type PlannedRoute, type Waypoint } from "./planner";
+import { TrailPlanner, circuitDistancesFor, documentedStarts, selectableCircuitStartIds, type PlannedRoute, type Waypoint } from "./planner";
 import { RouteSession, type WaypointEdit } from "./route-session";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
-export interface ToolContract { name: "plan_route" | "get_route_summary" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
+export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
 export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined) => void;
 export type PreparedGpx = Readonly<{ filename: string; content: string; exportedPoints: number; originalPoints: number; transitions: ReadonlyArray<Readonly<{ name: string; segmentName: string; latitude: number; longitude: number }>> }>;
 export type GpxRenderer = (prepared: PreparedGpx) => void | Promise<void>;
@@ -18,6 +18,7 @@ let renderRoute: ((route: PlannedRoute) => void | Promise<void>) | undefined;
 let renderPlanTarget: ((targetKm: number) => void | Promise<void>) | undefined;
 let renderGpx: GpxRenderer | undefined;
 let invocationObserver: ToolInvocationObserver | undefined;
+const sessionNotes: Array<{ kind: "test" | "product_insight" | "handoff"; note: string }> = [];
 
 export function setTrailPackProvenance(dataset: string, sources: string[]): void { provenance = { dataset, sources: [...sources] }; }
 export function setTrailPlanner(next: TrailPlanner): void { planner = next; activeRoute = undefined; routeSession = undefined; }
@@ -83,7 +84,40 @@ const gpxFor = (route: PlannedRoute): PreparedGpx => {
 
 const rawToolContracts: ToolContract[] = [
   {
-    name: "plan_route", description: "Plan and render a genuine Collserola circuit from a selectable car or public-transport origin. Every listed start is verified to close a loop at its suggested distance; it rejects long out-and-back retracing. The pack excludes urban footways and paved access roads. An ICGC LiDAR-based ascent estimate is added after the route renders, but elevation and grade filters remain unsupported.", annotations: untrusted,
+    name: "list_circuit_options", description: "List every currently selectable Collserola circuit origin, its arrival mode, and only the target distances that have been verified to close a non-retracing loop. Use this before proposing a route.", annotations: readOnly,
+    inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    execute: async (input, signal) => {
+      only(object(input), []);
+      return abortable(signal, { options: selectableCircuitStartIds.map((id) => { const start = documentedStarts[id]; return { start: id, name: start.name, arrival_mode: start.transportMode, verified_targets_km: circuitDistancesFor(start), recommended_km: start.recommendedKm }; }), source: "Current static Collserola TrailPack circuit matrix", caution: "Other documented access points are intentionally absent because they have not formed a verified non-retracing circuit." });
+    },
+  },
+  {
+    name: "validate_circuit", description: "Dry-run a listed start and verified target against the loaded directed TrailPack. It proves closure and distance without rendering or changing the customer’s active route.", annotations: readOnly,
+    inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: selectableCircuitStartIds }, target_km: { type: "number", description: "One of the verified_targets_km values returned by list_circuit_options." }, prefer_waymarked: { type: "boolean" } } },
+    execute: async (input, signal) => {
+      const data = object(input); only(data, ["start", "target_km", "prefer_waymarked"]);
+      const start = choice(data.start, "start", selectableCircuitStartIds); const targetKm = halfKilometres(data.target_km, "target_km");
+      if (typeof data.prefer_waymarked !== "boolean") throw new Error("prefer_waymarked must be true or false.");
+      const definition = documentedStarts[start]; const targets = circuitDistancesFor(definition);
+      if (!targets.includes(targetKm)) throw new Error(`${definition.name} has verified circuit targets of ${targets.join(", ")} km.`);
+      if (!planner) throw new Error("TrailPack graph is not ready; wait for its data status before validating.");
+      const route = planner.plan(start, targetKm, data.prefer_waymarked);
+      return abortable(signal, { validated: true, rendered: false, start, arrival_mode: definition.transportMode, requested_km: targetKm, route_km: route.distanceKm, returns_to_start: route.coordinates[0]?.[0] === route.coordinates.at(-1)?.[0] && route.coordinates[0]?.[1] === route.coordinates.at(-1)?.[1], shared_access_percent: route.sharedAccessPercent, official_match_percent: route.waymarkedPercent, note: "Dry-run only. Use plan_route to render the circuit for the customer." });
+    },
+  },
+  {
+    name: "record_session_note", description: "Record a short agent test result, product insight, or human handoff in the page’s visible session worklog. It is local to the current tab and makes agent work reviewable.", annotations: untrusted,
+    inputSchema: { type: "object", additionalProperties: false, required: ["kind", "note"], properties: { kind: { type: "string", enum: ["test", "product_insight", "handoff"] }, note: { type: "string", minLength: 1, maxLength: 240 } } },
+    execute: async (input, signal) => {
+      const data = object(input); only(data, ["kind", "note"]);
+      const kind = choice(data.kind, "kind", ["test", "product_insight", "handoff"] as const); const note = text(data.note, "note");
+      if (note.length > 240) throw new Error("note must be at most 240 characters.");
+      sessionNotes.push({ kind, note }); if (sessionNotes.length > 12) sessionNotes.shift();
+      return abortable(signal, { recorded: true, local_to_this_tab: true, kind, note, notes_in_session: sessionNotes.length, next_step: "The note is now visible in Switchback’s Tool invocation log for the human to review." });
+    },
+  },
+  {
+    name: "plan_route", description: "Plan and render a genuine Collserola circuit from a selectable car or public-transport origin. Every listed start has a small set of graph-verified target distances; use only its published values, returned in errors when needed. This prevents a non-loop target such as 3 km from Passeig de les Aigües. The pack excludes urban footways and paved access roads. An ICGC LiDAR-based ascent estimate is added after rendering.", annotations: untrusted,
     inputSchema: { type: "object", additionalProperties: false, required: ["start", "target_km", "prefer_waymarked"], properties: { start: { type: "string", enum: selectableCircuitStartIds, description: "Verified circuit origin. Use arrival_mode to choose car or public transport; the enum contains all currently selectable origins." }, arrival_mode: { type: "string", enum: ["car", "public_transport"], description: "Optional arrival context. When supplied, it must agree with the chosen origin." }, target_km: { type: "number", minimum: 1, maximum: 30, multipleOf: 0.5, description: "Desired circuit distance in 0.5 km steps, from 1 through 30. A result is accepted only within ±0.5 km." }, prefer_waymarked: { type: "boolean", description: "Bias toward the Park’s published A–E marked-path network while retaining OSM trail connectors needed to close a loop. It does not confirm present-day conditions." }, max_ascent_m: { type: "number", description: "Unsupported at plan-selection time; ascent is estimated after the route has rendered." }, max_grade: { type: "string", description: "Unsupported: this TrailPack has incomplete grade tags." } } },
     execute: async (input, signal) => {
       const data = object(input); only(data, ["start", "arrival_mode", "target_km", "prefer_waymarked", "max_ascent_m", "max_grade"]);
@@ -93,6 +127,8 @@ const rawToolContracts: ToolContract[] = [
       const startDefinition = documentedStarts[start];
       if (startDefinition.circuitStatus !== "verified") throw new Error(`${startDefinition.name} is saved as a ${startDefinition.transportMode === "car" ? "car" : "public-transport"} access point, but this TrailPack has not verified a circuit there. Choose a verified circuit origin or plan a future point-to-point route.`);
       if (data.arrival_mode !== undefined && data.arrival_mode !== startDefinition.transportMode) throw new Error(`arrival_mode must be ${startDefinition.transportMode} for ${startDefinition.name}.`);
+      const supportedDistances = circuitDistancesFor(startDefinition);
+      if (!supportedDistances.includes(targetKm)) throw new Error(`${startDefinition.name} has verified circuit targets of ${supportedDistances.join(", ")} km. ${targetKm} km is not offered because it does not close a non-retracing TrailPack loop.`);
       if (typeof data.prefer_waymarked !== "boolean") throw new Error("prefer_waymarked must be true or false.");
       if (!planner) throw new Error("TrailPack graph is not ready; wait for its data status before planning.");
       const next = planner.plan(start, targetKm, data.prefer_waymarked);

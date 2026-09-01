@@ -2,6 +2,9 @@
   "fixture_version": 1,
   "purpose": "Offline acceptance fixture for Switchback's browser-native tool surface.",
   "required_core_tools": [
+    "list_circuit_options",
+    "validate_circuit",
+    "record_session_note",
     "plan_route",
     "get_route_summary",
     "explain_segment",
@@ -16,7 +19,8 @@
   },
   "acceptance": {
     "registration": "Every active tool is offered to the browser model context.",
-    "routing": "plan_route renders a directed TrailPack loop before returning.",
+    "routing": "validate_circuit dry-runs a directed loop and plan_route renders it before returning.",
+    "agent_worklog": "record_session_note leaves a visible, local-to-tab record of agent test and handoff work.",
     "limitations": "Unsupported elevation and grade constraints must be rejected rather than estimated."
   }
 }

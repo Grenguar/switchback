@@ -12,7 +12,7 @@ type WebMcpFixture = {
   };
 };
 
-test("WebMCP evaluation fixture matches the active six-tool contract", async () => {
+test("WebMCP evaluation fixture matches the active agent-test tool contract", async () => {
   const fixture = JSON.parse(await readFile(new URL("../../evals/webmcp-tool-contract.json", import.meta.url), "utf8")) as WebMcpFixture;
   assert.deepEqual(activeRouteToolContracts.map((tool) => tool.name), fixture.required_core_tools);
   for (const tool of activeRouteToolContracts) {

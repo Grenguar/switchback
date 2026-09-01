@@ -9,6 +9,8 @@ export type StartDefinition = {
   transportMode: "car" | "public_transport";
   circuitStatus: "verified" | "point_to_point_only";
   recommendedKm: number;
+  /** Targets already verified against this static directed graph. */
+  circuitDistancesKm?: readonly number[];
   description: string;
 };
 
@@ -22,6 +24,7 @@ export const documentedStarts = {
     transportMode: "car",
     circuitStatus: "verified",
     recommendedKm: 7,
+    circuitDistancesKm: [7],
     description: "Car-access trailhead at the Vista Rica parking area on the Arrabassada road, verified 14 m from the Collserola trail graph.",
   },
   passeig_aigues_parking: {
@@ -35,26 +38,29 @@ export const documentedStarts = {
     // Under the strict non-retracing threshold this nearby start has a
     // dependable short circuit, not a credible 3.5 km one.
     recommendedKm: 2,
+    circuitDistancesKm: [2],
     description: "Your suggested parking start at Passeig de les Aigües, verified 21 m from the Collserola trail graph.",
   },
   centre_informacio_vallvidrera: { id: "centre_informacio_vallvidrera", name: "Centre d'Informació / Santa Maria de Vallvidrera", latitude: 41.41952, longitude: 2.10121, availability: "available", transportMode: "car", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "Free parking beside the church at the park’s main hub, with maps and a bar." },
-  budellera_parking: { id: "budellera_parking", name: "Parking Itineraris La Budellera", latitude: 41.42075, longitude: 2.10848, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 3.5, description: "Revolt de les Monges parking for roughly 10–13 cars; it fills quickly on fair weekends." },
-  panta_vallvidrera: { id: "panta_vallvidrera", name: "Pantà de Vallvidrera", latitude: 41.41520, longitude: 2.09744, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 3.5, description: "Roadside parking near the reservoir and GR-92." },
-  santa_creu_olorda: { id: "santa_creu_olorda", name: "Santa Creu d'Olorda", latitude: 41.41653, longitude: 2.05809, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 2, description: "Western car approach from Molins de Rei; the simplest access from Tarragona without crossing Barcelona." },
-  can_jane_sant_cugat: { id: "can_jane_sant_cugat", name: "Can Jané, Sant Cugat", latitude: 41.44457, longitude: 2.11759, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 7, description: "Car access for Sant Medir, with the trail network starting near Can Jané." },
-  can_coll_cerdanyola: { id: "can_coll_cerdanyola", name: "Can Coll, Cerdanyola", latitude: 41.47369, longitude: 2.12437, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 5, description: "Quiet northern-sector car start at Can Coll." },
+  budellera_parking: { id: "budellera_parking", name: "Parking Itineraris La Budellera", latitude: 41.42075, longitude: 2.10848, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 3.5, circuitDistancesKm: [3.5], description: "Revolt de les Monges parking for roughly 10–13 cars; it fills quickly on fair weekends." },
+  panta_vallvidrera: { id: "panta_vallvidrera", name: "Pantà de Vallvidrera", latitude: 41.41520, longitude: 2.09744, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 3.5, circuitDistancesKm: [3.5], description: "Roadside parking near the reservoir and GR-92." },
+  santa_creu_olorda: { id: "santa_creu_olorda", name: "Santa Creu d'Olorda", latitude: 41.41653, longitude: 2.05809, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 2, circuitDistancesKm: [2], description: "Western car approach from Molins de Rei; the simplest access from Tarragona without crossing Barcelona." },
+  can_jane_sant_cugat: { id: "can_jane_sant_cugat", name: "Can Jané, Sant Cugat", latitude: 41.44457, longitude: 2.11759, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 7, circuitDistancesKm: [7], description: "Car access for Sant Medir, with the trail network starting near Can Jané." },
+  can_coll_cerdanyola: { id: "can_coll_cerdanyola", name: "Can Coll, Cerdanyola", latitude: 41.47369, longitude: 2.12437, availability: "available", transportMode: "car", circuitStatus: "verified", recommendedKm: 5, circuitDistancesKm: [5], description: "Quiet northern-sector car start at Can Coll." },
+  cami_vallvidrera_paid_parking: { id: "cami_vallvidrera_paid_parking", name: "Camí de Vallvidrera al Tibidabo paid parking", latitude: 41.4203836, longitude: 2.118936322, availability: "available", transportMode: "car", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "Paid parking at Camí de Vallvidrera al Tibidabo 47–53, Vallvidrera, Sarrià-Sant Gervasi. Saved for a future point-to-point route; the current TrailPack has not verified a circuit here." },
   baixador_vallvidrera: { id: "baixador_vallvidrera", name: "Baixador de Vallvidrera (FGC)", latitude: 41.42004, longitude: 2.09687, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "FGC S1/S2; a short walk to the information centre, Vil·la Joana, Budellera and the reservoir." },
   les_planes_fgc: { id: "les_planes_fgc", name: "Les Planes (FGC)", latitude: 41.42742, longitude: 2.09158, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "FGC S1/S2 for northern trails toward Sant Medir and Can Borrell." },
   la_floresta_fgc: { id: "la_floresta_fgc", name: "La Floresta (FGC)", latitude: 41.44490, longitude: 2.07308, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "FGC S1/S2 for the western Rierada and waterfall sector." },
   peu_funicular: { id: "peu_funicular", name: "Peu del Funicular", latitude: 41.40907, longitude: 2.11143, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "Use the funicular to Vallvidrera Superior for ridge access without the climb." },
   torre_baro_vallbona: { id: "torre_baro_vallbona", name: "Torre Baró / Vallbona", latitude: 41.45933, longitude: 2.18074, availability: "available", transportMode: "public_transport", circuitStatus: "point_to_point_only", recommendedKm: 7, description: "L11 and R3/R4 access at the far north-east ridge near Torre Baró castle." },
-  mirador_xiprers: { id: "mirador_xiprers", name: "Mirador dels Xiprers", latitude: 41.38992, longitude: 2.10010, availability: "available", transportMode: "public_transport", circuitStatus: "verified", recommendedKm: 7, description: "Bus 22 or Av. Tibidabo access for the Carretera de les Aigües balcony route." },
+  mirador_xiprers: { id: "mirador_xiprers", name: "Mirador dels Xiprers", latitude: 41.38992, longitude: 2.10010, availability: "available", transportMode: "public_transport", circuitStatus: "verified", recommendedKm: 7, circuitDistancesKm: [7], description: "Bus 22 or Av. Tibidabo access for the Carretera de les Aigües balcony route." },
 } as const satisfies Record<string, StartDefinition>;
 export type StartId = keyof typeof documentedStarts;
 /** Origins which the current graph has actually proved can form a circuit. */
 export const selectableCircuitStartIds = Object.entries(documentedStarts)
   .filter(([, start]) => start.circuitStatus === "verified")
   .map(([id]) => id as StartId) as readonly StartId[];
+export const circuitDistancesFor = (start: StartDefinition): readonly number[] => start.circuitDistancesKm ?? [start.recommendedKm];
 export type PlannedSegment = { name: string; surface: string | null; sac_scale: string | null; waymarked: boolean; official_ref: string | null };
 export type PlannedRoute = { id: string; name: string; start: (typeof documentedStarts)[StartId]; distanceKm: number; durationHours: number; waymarkedPercent: number; sharedAccessPercent: number; ascentM: number | null; coordinates: Array<[number, number]>; segments: PlannedSegment[]; edgeIds: string[]; source: string };
 /** A user-selected coordinate that must resolve to a nearby TrailPack node. */

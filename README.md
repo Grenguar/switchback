@@ -1,108 +1,94 @@
 # Switchback
 
-Source-backed Collserola–Vallvidrera trails, made loopable at the length you have time for
-— planned with an agent on a live map.
+[![Netlify Status](https://api.netlify.com/api/v1/badges/bafb7ab9-419a-4ca2-8376-c944abd91b19/deploy-status)](https://app.netlify.com/projects/switchback-mvp-igor/deploys)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Switchback is an entry for the OpenAI WebMCP Challenge. Its first region is
-Collserola–Vallvidrera: an offline pipeline produces a portable, tiled
-**TrailPack** from local OSM and CNIG/FEDME inputs. A hiker and an agent share
-the same live route-planning surface: the agent calls inspectable site tools,
-and the person sees the resulting directed route on the map.
+**Ask for a loop. See the ground truth.**
 
-## MVP status
+Switchback is a WebMCP-native planner for a short, car-accessible or transit-accessible walk in Collserola–Vallvidrera. A person and an agent work on the same map: the agent discovers site tools, chooses a graph-verified circuit, explains its evidence and limits, and leaves the resulting route visible for the person to inspect and export.
 
-This repository is being built as a feasibility spike. The goal is to prove a
-small, honest end-to-end loop before expanding the product:
+**Live demo:** [switchback-mvp-igor.netlify.app](https://switchback-mvp-igor.netlify.app)
 
-1. Build and load a provenance-carrying TrailPack with 66 Collserola tiles.
-2. Generate a directed loop from a verified parking start: Vista Rica or Passeig de les Aigües.
-3. Expose six planning actions as browser-native WebMCP site tools.
-4. Let the person inspect, alter, and export the same route the agent planned.
+![Switchback showing a rendered Vista Rica circuit, its graph-verified length choices, and estimated climb.](docs/screenshots/switchback-route-planner.png)
 
-The app is intentionally static: no user account, private trail history, or
-server-side itinerary store is required for the MVP.
+## Why WebMCP
 
-## Development
+Trail planning is a shared decision, not a text answer. A generic assistant can suggest a scenic walk but cannot show whether that proposal closes as a non-retracing circuit on the map the person is looking at. Switchback gives the agent page-bound tools that act on the same TrailPack and route state as the UI.
 
-The frontend lives in [`web/`](web/). Once its dependencies are installed:
+The result is inspectable: a person can see the selected trailhead, rendered line, distance, sampled climb, marked-path coverage, GPX handoff, and every tool call in the visible worklog.
+
+## What an agent can do
+
+The app registers ten browser-native WebMCP tools:
+
+1. List graph-verified circuit choices.
+2. Dry-run a circuit before altering the map.
+3. Record a visible session note.
+4. Plan and render a closed circuit.
+5. Summarize the active route.
+6. Explain the route’s difficulty evidence and gaps.
+7. Explain a TrailPack segment.
+8. Avoid a segment and replan without silently changing a failed route.
+9. Prepare a full-resolution GPX handoff.
+10. Describe the last accepted map edit.
+
+For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. The agent must explicitly choose to call tools; the app shows whether a browser model context is connected.
+
+## Honest route evidence
+
+Switchback only offers starts and target lengths that its directed graph can close without a long retraced leg. The route card distinguishes the selected target from the rendered route distance; for example, a 3.5 km target may render as a 3.6 km circuit within the accepted tolerance.
+
+Length profiles are **Short / Medium / Long**, never difficulty labels. `explain_difficulty` classifies a rendered route conservatively using sampled ICGC LiDAR ascent plus available OSM terrain tags. It returns `unrated` when those facts cannot support a responsible call.
+
+The current TrailPack does **not** prove current signs, closures, weather, surface condition, obstacles, exposure, grade, or technical difficulty. Park marked-path preference is evidence from the published network, not a statement of present-day waymarking. Check local conditions before departure.
+
+## Run locally
+
+Prerequisites: Node 24+ and pnpm. Rust is only needed to rebuild TrailPack data.
 
 ```sh
 pnpm --dir web install
 pnpm --dir web dev
 ```
 
-Netlify builds from `web/` with `pnpm run build` and publishes `dist`. Routing
-uses only the local TrailPack graph; the map is a visual reference layer, not a
-routing dependency.
+Open the local Vite URL. The manual planner works in any modern browser; agent tools require a browser that exposes a WebMCP model context.
 
-### Interactive map setup
+Validate the shipped web app:
 
-The map uses MapLibre. It automatically uses Amazon Location Maps V2 terrain
-when these **build** variables are set in Netlify, then
-falls back to OpenStreetMap when they are absent:
-
-```text
-VITE_AWS_LOCATION_API_KEY=<restricted public Maps V2 key>
-VITE_AWS_LOCATION_REGION=eu-west-1
+```sh
+pnpm --dir web run build
+pnpm --dir web run test
 ```
 
-`VITE_` values are intentionally visible to the browser. Never use AWS access
-keys here: create an Amazon Location API key restricted to `geo-maps:*`,
-`arn:aws:geo-maps:eu-west-1::provider/default`, and the production site
-referrer only. Rebuild the Netlify site after adding or rotating the key.
-For local work, copy [`.env.example`](.env.example) to the repository root as
-`.env`; Vite reads that root file while serving `web/`.
-
-Run the complete offline validation and evidence bundle from a Node 24 shell:
+The offline evidence bundle is also available:
 
 ```sh
 bash scripts/evaluate-mvp-offline.sh
 ```
 
-See [`docs/MVP-EVALUATION.md`](docs/MVP-EVALUATION.md) for measured Q3/Q6
-evidence and [`docs/DEMO.md`](docs/DEMO.md) for the WebMCP walkthrough.
+## Data and reproducibility
 
-## Data, attribution, and scope
+The static TrailPack consists of 66 Collserola tiles with source records in its manifest. It combines OpenStreetMap trail data (ODbL) with the Park’s Dynamic Public-Use Network A–E, used as a preference signal where it helps close a route.
 
-TrailPack manifests carry their own source records. The application must render
-the attribution supplied in `manifest.sources` rather than baking individual
-source names into its UI. The current Collserola pack combines OpenStreetMap
-(ODbL) trails with the Park’s Dynamic Public-Use Network A–E codes. The latter
-is displayed as a clickable marked-path overlay and biases routing when
-`prefer_waymarked` is true; OSM trail connections remain available when they
-are needed to close a non-retracing loop. The Park does not state a licence on
-that KML, so its attribution and source date are carried explicitly in the
-manifest.
+To rebuild the official overlay and tiles, follow the commands and source notes in [docs/MVP-EVALUATION.md](docs/MVP-EVALUATION.md). The app routes locally over the TrailPack; map tiles are a visual reference layer, not a routing dependency.
 
-To refresh the official overlay from the Park’s published KML, first download
-`https://parcnaturalcollserola.cat/kml/xdup.kml`, then run:
+Useful supporting material:
 
-```sh
-node scripts/build-collserola-official-network.mjs /path/to/xdup.kml \
-  web/public/trailpack/collserola-official-network-a-e.geojson \
-  /tmp/collserola-official-a-e.kml
-target/debug/switchback-cli build-tiles --osm /path/to/barcelona.osm.pbf \
-  --official-network /tmp/collserola-official-a-e.kml \
-  --bbox 2.055,41.38,2.20,41.52 --output-dir web/public/trailpack \
-  --built-at 2026-09-01T00:00:00Z --extract-date 2026-09-01 \
-  --region-id es-ct-collserola --region-name Collserola \
-  --osm-source-id osm-barcelona-bbbike --osm-source-name OSM-Barcelona-Bounded
-```
+- [WebMCP demo walkthrough](docs/DEMO.md)
+- [MVP evaluation evidence](docs/MVP-EVALUATION.md)
+- [Apache-2.0 license](LICENSE)
 
-This is a standalone hackathon repository. It contains no code, assets, or
-data imported from the adjacent Die Hard Running work.
+## Devpost demo checklist
 
-## Licence
+- [x] Public live URL
+- [x] WebMCP registration and visible agent-tool worklog
+- [x] End-to-end route generation and user-click GPX handoff
+- [x] Open-source license file
+- [ ] Public GitHub repository — currently private; change visibility before submission
+- [ ] Public, audible demo video under three minutes
+- [ ] Devpost submission completed (not merely saved as a draft)
+- [ ] Teammates invited and accepted, if applicable
 
-The source code is licensed under [Apache-2.0](LICENSE). The licence applies to
-this repository's code, not to third-party map tiles or trail datasets.
+## License
 
-## Project references
-
-The product and implementation planning documents are maintained in the local
-Brain vault. The repository issue tracker is the executable MVP board:
-
-- [MVP Spike milestone](https://github.com/Grenguar/switchback/milestone/1)
-- [Rust pipeline and TrailPack epic](https://github.com/Grenguar/switchback/issues/36)
-- [WebMCP integration epic](https://github.com/Grenguar/switchback/issues/7)
-- [Browser routing and loop generation epic](https://github.com/Grenguar/switchback/issues/12)
+Source code is licensed under [Apache-2.0](LICENSE). Third-party map tiles and trail datasets retain their respective terms and attributions.

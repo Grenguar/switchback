@@ -84,9 +84,14 @@ The static TrailPack consists of 66 Collserola tiles with source records in its 
 
 To rebuild the official overlay and tiles, follow the commands and source notes in [docs/MVP-EVALUATION.md](docs/MVP-EVALUATION.md). The app routes locally over the TrailPack; map tiles are a visual reference layer, not a routing dependency.
 
+For the end-to-end preparation story—including graph normalisation, live
+forecast/notice normalisation, translation safeguards, and release
+validation—read [what Switchback prepares and normalises](docs/IMPLEMENTATION.md).
+
 Useful supporting material:
 
 - [How WebMCP works and complete tool reference](docs/WEBMCP.md)
+- [What was prepared and normalised for the demo](docs/IMPLEMENTATION.md)
 - [Operations, live data, translations, and safety boundaries](docs/OPERATIONS.md)
 - [Submission video script](docs/VIDEO-SCRIPT.md)
 - [Short demo walkthrough](docs/DEMO.md)

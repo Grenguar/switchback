@@ -137,8 +137,6 @@ Useful supporting material:
 - [How WebMCP works and complete tool reference](docs/WEBMCP.md)
 - [What was prepared and normalised for the demo](docs/IMPLEMENTATION.md)
 - [Operations, live data, translations, and safety boundaries](docs/OPERATIONS.md)
-- [Submission video script](docs/VIDEO-SCRIPT.md)
-- [Short demo walkthrough](docs/DEMO.md)
 - [MVP evaluation evidence](docs/MVP-EVALUATION.md)
 - [Apache-2.0 license](LICENSE)
 

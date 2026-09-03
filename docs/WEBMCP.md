@@ -20,7 +20,7 @@ route card, shared trail ledger, and invocation log that the person can inspect.
 In a normal browser, the manual planner remains fully useful and the page says
 that it is in browser-demo mode. That is not evidence that WebMCP is connected.
 
-## The thirteen tools
+## The fourteen tools
 
 | Tool | What it does | Shared visible effect |
 | --- | --- | --- |
@@ -33,7 +33,8 @@ that it is in browser-demo mode. That is not evidence that WebMCP is connected.
 | `explain_segment` | Returns available OSM terrain tags and official-match evidence for one active segment. | None; read-only evidence. |
 | `avoid_segment` | Replans around one active physical segment, but fails closed if a verified replacement is unavailable. | Map and route card only after a valid replacement. |
 | `prepare_gpx` | Builds the complete GPX trace and exposes a download control. | User-click `Download GPX` control; no automatic download. |
-| `get_trail_weather` | Compares three local forecast days and finds a limited least-exposed daytime window. | Forecast planning-context panel. |
+| `get_trail_weather` | Compares three local forecast days, including a 17:00–20:00 evening candidate and sunrise/sunset. | Forecast planning-context panel. |
+| `get_hiking_conditions` | Combines route facts, conservative difficulty evidence, requested-time forecast/daylight, and alert availability. It explicitly cannot certify a hike as safe. | Forecast/alert panels and ledger. |
 | `get_park_alerts` | Reads the official active Park notices through the same-origin adapter. | Alert panel with source links and optional English translations. |
 | `prepare_route_briefing` | Builds a short, copyable family / friends briefing. | Reviewable briefing and Copy control; no message is sent. |
 | `describe_last_edit` | Describes the last accepted manual route edit and its measured effect. | None; read-only evidence. |
@@ -48,8 +49,11 @@ The main conversation can be natural. For example:
 `plan_route` returns a chat-ready summary after rendering the graph-verified
 loop. It attempts the forecast and official-alert checks concurrently. The
 result names what was available and asks whether the person wants a briefing or
-GPX next. A failed external source never turns a route into a fake “safe”
-recommendation: the response says the route is based on TrailPack evidence only.
+GPX next. For an evening question, `get_hiking_conditions` accepts
+`time_of_day: "evening"` and returns the 17:00–20:00 forecast candidate plus
+sunrise/sunset, route evidence, and alert availability. It always returns
+`safety_clearance: false`: a failed external source or a favourable forecast
+never becomes a fake “safe” recommendation.
 
 ## Tool boundaries
 
@@ -71,11 +75,11 @@ recommendation: the response says the route is based on TrailPack evidence only.
 Use the site tools on this Switchback page. First call list_circuit_options and
 choose a returned short, medium, or long distance profile; these are not
 difficulty ratings. Call validate_circuit, then plan_route and
-get_route_summary. Call explain_difficulty, get_park_alerts, and
-get_trail_weather before recommending the route. If either external source is
-unavailable, state that the recommendation is based on TrailPack evidence only.
-Record the result with record_session_note and state its evidence and
-limitations.
+get_route_summary. For an evening hiking question, call
+get_hiking_conditions with time_of_day evening and get_park_alerts with
+notice_limit 8. Explain route evidence, forecast/daylight, Park notices, and
+what must still be checked locally. Do not say the hike is safe; record the
+result with record_session_note and do not start a GPX download.
 ```
 
 For a live demonstration, capture the agent discovering the tools, the ledger

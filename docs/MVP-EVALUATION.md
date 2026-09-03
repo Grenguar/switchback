@@ -24,7 +24,7 @@ registration failure retains the count of successful registrations. It also
 proves that `plan_route` renders before it returns and rejects unsupported
 elevation/grade requests.
 
-The fixture requires the current thirteen-tool surface. If the tool suite changes,
+The fixture requires the current fourteen-tool surface. If the tool suite changes,
 update the fixture and its acceptance evidence deliberately; do not silently
 weaken the expected registration set.
 

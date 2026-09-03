@@ -121,6 +121,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .route-weather > p:not(.eyebrow) { margin: 0; font-weight: 600; }
 .route-weather ul { display: grid; gap: 5px; margin: 10px 0; padding: 0; list-style: none; }
 .route-weather li { padding-left: 8px; border-left: 2px solid #b7cf5c; }
+.route-weather .weather-day { display: grid; gap: 2px; padding: 8px 0 8px 10px; border-left-width: 3px; background: color-mix(in srgb, #dce9a0 20%, transparent); }
+.route-weather .weather-day strong { color: #173328; font-size: .66rem; }
+.route-weather .weather-day span { overflow-wrap: anywhere; }
+.route-weather .weather-day small { color: #49655a; font: .59rem/1.45 'DM Mono', monospace; }
 .route-weather .weather-status { color: #49655a; font-weight: 400; }
 .route-briefing { margin-top: 14px; padding-top: 12px; border-top: 1px solid #afbdab; }
 .route-briefing .eyebrow { margin-bottom: 8px; }

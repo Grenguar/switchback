@@ -9,6 +9,7 @@ import { TrailMap } from "./trail-map";
 import { registerWebMcpTools, type BridgeStatus } from "./webmcp";
 import { estimateRouteAscent } from "./elevation";
 import { assessRouteDifficulty } from "./difficulty";
+import { chooseAgentPrompt } from "./agent-prompts";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing application root.");
@@ -18,7 +19,7 @@ let logSequence = 0;
 app.innerHTML = `
   <main class="shell">
     <header class="masthead"><a class="wordmark" href="/" aria-label="Switchback home">SWITCHBACK<span>↗</span></a><div class="status"><i class="status-dot ${bridge.status}" id="bridge-dot"></i><span id="bridge-label">Checking WebMCP…</span></div><button class="plain-button" id="register" type="button">Check model context</button></header>
-    <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p><button class="context-help" id="copy-agent-prompt" type="button">Copy agent test prompt</button><p class="context-help-status" id="copy-agent-prompt-status" role="status" aria-live="polite"></p></div></section>
+    <section class="model-context-check" aria-labelledby="model-context-title"><div><p class="eyebrow" id="model-context-title">WebMCP status</p><p id="model-context-status" role="status" aria-live="polite">Checking this browser for an agent tool context…</p></div><div><p id="model-context-next">If tools are available, an agent on this page can discover them without a separate connection.</p><p class="agent-prompt-label">Try asking</p><blockquote class="agent-prompt-suggestion" id="agent-prompt-suggestion" aria-live="polite"></blockquote><div class="agent-prompt-actions"><button class="context-help" id="copy-agent-prompt" type="button">Copy prompt</button><button class="context-help secondary" id="shuffle-agent-prompt" type="button">Try another</button></div><p class="context-help-status" id="copy-agent-prompt-status" role="status" aria-live="polite"></p></div></section>
     <section class="agent-activity" aria-labelledby="agent-activity-title"><div class="agent-activity-lead"><p class="eyebrow">Shared trail ledger</p><h2 id="agent-activity-title">Nothing happens off-map.</h2><p id="agent-activity-status" role="status" aria-live="polite" aria-atomic="true">Waiting for an agent action. You can also run the same actions yourself.</p></div><div class="agent-current" id="agent-current" data-state="idle"><i aria-hidden="true"></i><div><p id="agent-current-kicker">Ready</p><strong id="agent-current-action">The next route decision will appear here.</strong></div></div><ol class="agent-activity-feed" id="agent-activity-feed" aria-label="Recent agent and page actions"><li class="empty">No action has run in this tab yet.</li></ol></section>
     <section class="intro" aria-labelledby="intro-title"><p class="eyebrow">Trail intelligence, made inspectable</p><h1 id="intro-title">Ask for a loop.<br><em>See the ground truth.</em></h1><p class="lede">A WebMCP-native route planner for the places where a paper map still matters. TrailPack provenance is visible before a route is trusted.</p></section>
     <section class="workspace" aria-label="Route planning workspace">
@@ -169,7 +170,7 @@ setParkAlertsUnavailableRenderer(renderParkAlertsUnavailable);
 window.addEventListener("pagehide", clearPreparedGpx);
 const bridgeCopy: Record<BridgeStatus, { label: string; next: string }> = {
   unavailable: { label: "Browser demo mode", next: "In ChatGPT, start a fresh GPT-5.6 Sol or Terra chat, have it open this URL in its browser, then reload this page or press Check model context. A normal browser tab cannot expose agent tools." },
-  registered: { label: "WebMCP connected", next: "Tools are registered on this page. Ask your agent to discover the site tools and call plan_route." },
+  registered: { label: "WebMCP connected", next: "Ready for a conversation. Pick an idea below or ask for your own walk." },
   failed: { label: "WebMCP registration failed", next: "The browser exposed a model context but did not accept all tools. Check the message, reload the page, then try again." },
 };
 function renderBridgeStatus(result: { status: BridgeStatus; count: number; message: string }): void {
@@ -429,15 +430,26 @@ trailMap?.previewStart(documentedStarts[selectedStart]);
 setPlanTargetRenderer(setDistance);
 document.querySelectorAll<HTMLButtonElement>("[data-tool]").forEach((button) => button.addEventListener("click", () => { const name = button.dataset.tool ?? ""; const inputs: Record<string, Record<string, unknown>> = { list_circuit_options: {}, validate_circuit: planInput(), record_session_note: { kind: "test", note: "In-page test recorded from the Switchback tool surface." }, plan_route: planInput(), get_route_summary: {}, explain_difficulty: {}, explain_segment: { segment_name: "" }, avoid_segment: { segment_name: "" }, get_trail_weather: {}, get_park_alerts: {}, prepare_route_briefing: {}, describe_last_edit: {} }; void invoke(name, inputs[name] ?? {}); }));
 document.querySelector<HTMLButtonElement>("#register")?.addEventListener("click", () => { void checkModelContext(); });
-const agentTestPrompt = "Use the site tools on this Switchback page. First call list_circuit_options and choose a returned short, medium, or long distance profile; these are not difficulty ratings. Call validate_circuit, then plan_route and get_route_summary. Call get_hiking_conditions with time_of_day evening, explain_difficulty, and get_park_alerts with notice_limit 8 before discussing an evening hike. If either external source is unavailable, state that the recommendation is based on TrailPack evidence only. Do not call the hike safe: explain the route evidence, forecast/daylight, official notices, and what still needs local checking. Record the result with record_session_note.";
+let agentPrompt = chooseAgentPrompt();
+const renderAgentPrompt = (): void => {
+  const suggestion = document.querySelector<HTMLElement>("#agent-prompt-suggestion");
+  if (suggestion) suggestion.textContent = `“${agentPrompt}”`;
+};
+renderAgentPrompt();
 document.querySelector<HTMLButtonElement>("#copy-agent-prompt")?.addEventListener("click", async () => {
   const status = document.querySelector<HTMLElement>("#copy-agent-prompt-status");
   try {
-    await navigator.clipboard.writeText(agentTestPrompt);
-    if (status) status.textContent = "Test prompt copied. Paste it into the same ChatGPT conversation after the page shows WebMCP connected.";
+    await navigator.clipboard.writeText(agentPrompt);
+    if (status) status.textContent = "Prompt copied. Paste it into this ChatGPT conversation.";
   } catch {
-    if (status) status.textContent = `Copy unavailable. Use this prompt: ${agentTestPrompt}`;
+    if (status) status.textContent = `Copy unavailable. Use this prompt: ${agentPrompt}`;
   }
+});
+document.querySelector<HTMLButtonElement>("#shuffle-agent-prompt")?.addEventListener("click", () => {
+  const status = document.querySelector<HTMLElement>("#copy-agent-prompt-status");
+  agentPrompt = chooseAgentPrompt(Math.random, agentPrompt);
+  renderAgentPrompt();
+  if (status) status.textContent = "New idea ready.";
 });
 
 // Some agent browsers attach their model context after the document's first

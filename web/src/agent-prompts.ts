@@ -1,10 +1,10 @@
 export const agentConversationPrompts = Object.freeze([
-  "Plan a relaxed 7 km loop from Vista Rica by car. Show it on the map and check the weather and Park alerts.",
-  "I'm going hiking with my girlfriend and we're driving. Pick a verified loop, plan it now, and show it on the map.",
-  "Find me a short Collserola walk I can reach by public transport. Plan it now and show me the route.",
-  "Surprise me with a verified Collserola loop for this weekend. Plan it now, show it on the map, and tell me what to check before I go.",
-  "I want a medium-length walk by car. Choose a verified start, plan the loop now, show it on the map, and check conditions.",
-  "I have an afternoon free and want to hike by public transport. Pick a verified loop, plan it now, and show it on the map.",
+  "Use Switchback site tools. Plan a relaxed 7 km loop from Vista Rica by car. Show it on the map and check weather and Park alerts.",
+  "Use Switchback site tools. I'm hiking with my girlfriend and we're driving. Pick and plan a verified loop, then show it on the map.",
+  "Use Switchback site tools. Find a short Collserola walk by public transport. Plan it now and show me the route.",
+  "Use Switchback site tools. Surprise me with a verified weekend loop. Plan it now, show it on the map, and check conditions.",
+  "Use Switchback site tools. Choose a medium loop by car. Plan it now, show it on the map, and check conditions.",
+  "Use Switchback site tools. Pick an afternoon loop by public transport. Plan it now and show it on the map.",
 ] as const);
 
 /** Picks a fresh conversation starter while avoiding an immediate repeat. */

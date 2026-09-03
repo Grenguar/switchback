@@ -3,6 +3,8 @@
 [![Netlify Status](https://api.netlify.com/api/v1/badges/bafb7ab9-419a-4ca2-8376-c944abd91b19/deploy-status)](https://app.netlify.com/projects/switchback-mvp-igor/deploys)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+📽️ **[Pitch deck (PDF)](switch_back_pitchdeck.pdf)**
+
 🚨 [Live Website](https://switchback-mvp-igor.netlify.app)
 
 **Ask for a loop. See the ground truth.**

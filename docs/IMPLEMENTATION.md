@@ -4,6 +4,27 @@ This note records the work behind the demo. It is deliberately specific about
 what each layer establishes and what it does not establish, so an agent and a
 person can make a reviewable decision together.
 
+## Submission-period additions
+
+The WebMCP challenge work added the agent-native, human-reviewable experience
+to Switchback:
+
+- Thirteen strict browser tools that discover, validate, plan, explain, adapt,
+  brief, and prepare a GPX from the page's real state.
+- A visible shared action ledger and invocation worklog, so people see each
+  agent action and its result rather than receiving an opaque text answer.
+- Conversational `plan_route` results that render the graph-verified route
+  before returning and check live planning context without making live-source
+  availability a precondition for the route.
+- Human-controlled briefing copy and GPX download handoffs.
+- Three-day forecast comparison, official Park-alert retrieval, original
+  Catalan preservation, optional English machine translation, caching, and
+  server-side request limiting.
+
+The [README judge quick start](../README.md#judge-quick-start--live-webmcp-demo)
+gives the exact live verification flow; [WEBMCP.md](WEBMCP.md) describes each
+tool and its visible effect.
+
 ## 1. Route-data preparation
 
 Switchback turns published trail data into a static, browser-loadable

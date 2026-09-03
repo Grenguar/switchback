@@ -5,6 +5,7 @@ import { agentConversationPrompts, chooseAgentPrompt } from "../src/agent-prompt
 test("conversation starters explicitly ask the agent to plan and show a route", () => {
   assert.ok(agentConversationPrompts.length >= 5);
   for (const prompt of agentConversationPrompts) {
+    assert.match(prompt, /^Use Switchback site tools\./);
     assert.match(prompt, /\b(plan|pick|choose)\b/i);
     assert.match(prompt, /\b(show|map)\b/i);
     assert.ok(prompt.length <= 150);

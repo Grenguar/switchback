@@ -22,8 +22,8 @@ const artifact: TrailPackArtifact = {
   ] } },
 };
 
-test("all thirteen tool contracts are present and have strict object schemas", () => {
-  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "get_trail_weather", "get_park_alerts", "prepare_route_briefing", "describe_last_edit"]);
+test("all fourteen tool contracts are present and have strict object schemas", () => {
+  assert.deepEqual(toolContracts.map((tool) => tool.name), ["list_circuit_options", "validate_circuit", "record_session_note", "plan_route", "get_route_summary", "explain_difficulty", "explain_segment", "avoid_segment", "prepare_gpx", "get_trail_weather", "get_hiking_conditions", "get_park_alerts", "prepare_route_briefing", "describe_last_edit"]);
   for (const tool of toolContracts) { assert.equal(tool.inputSchema.type, "object"); assert.equal(tool.inputSchema.additionalProperties, false); assert.equal(tool.annotations.untrustedContentHint, true); }
 });
 
@@ -50,8 +50,8 @@ test("get_park_alerts returns sourced notices without claiming route applicabili
     let rendered = false;
     setParkAlertsRenderer(() => { rendered = true; });
     const alerts = toolContracts.find((candidate) => candidate.name === "get_park_alerts"); assert.ok(alerts);
-    const result = await alerts.execute({}) as { alerts_ready: boolean; active_alert_count: number; latest_active_alerts: Array<{ title: string }>; next_step: string };
-    assert.equal(result.alerts_ready, true); assert.equal(result.active_alert_count, 1); assert.equal(result.latest_active_alerts[0]?.title, "Access closure"); assert.match(result.next_step, /applies to the route/); assert.equal(rendered, true); assert.ok(JSON.stringify(result).length <= 1_500);
+    const result = await alerts.execute({ notice_limit: 1 }) as { alerts_ready: boolean; active_alert_count: number; active_alerts: Array<{ title: string }>; next_step: string };
+    assert.equal(result.alerts_ready, true); assert.equal(result.active_alert_count, 1); assert.equal(result.active_alerts[0]?.title, "Access closure"); assert.match(result.next_step, /applies to the route/); assert.equal(rendered, true); assert.ok(JSON.stringify(result).length <= 1_500);
   } finally {
     globalThis.fetch = originalFetch;
     setParkAlertsRenderer(undefined);
@@ -78,12 +78,16 @@ test("unavailable external sources return availability status without blocking a
   }
 });
 
-test("get_trail_weather compares three local days and adds limited forecast context to the briefing", async () => {
+test("get_trail_weather includes evening and daylight context without certifying hiking safety", async () => {
   const originalFetch = globalThis.fetch;
-  const times = ["2026-09-01", "2026-09-02", "2026-09-03"].flatMap((date) => Array.from({ length: 9 }, (_, index) => `${date}T${String(index + 8).padStart(2, "0")}:00`));
-  globalThis.fetch = async () => new Response(JSON.stringify({ timezone: "Europe/Madrid", hourly: {
+  const dates = ["2026-09-01", "2026-09-02", "2026-09-03"];
+  const times = dates.flatMap((date) => Array.from({ length: 12 }, (_, index) => `${date}T${String(index + 8).padStart(2, "0")}:00`));
+  const forecastPayload = { timezone: "Europe/Madrid", hourly: {
     time: times, temperature_2m: times.map(() => 20), precipitation_probability: times.map((_, index) => index < 3 ? 5 : 35), precipitation: times.map((_, index) => index < 3 ? 0 : 0.3), weather_code: times.map((_, index) => index < 3 ? 0 : 61), wind_speed_10m: times.map(() => 7), wind_gusts_10m: times.map(() => 15),
-  } }), { status: 200 });
+  }, daily: { time: dates, sunrise: dates.map((date) => `${date}T07:21`), sunset: dates.map((date) => `${date}T20:16`) } };
+  globalThis.fetch = async (input) => String(input).includes("open-meteo")
+    ? new Response(JSON.stringify(forecastPayload), { status: 200 })
+    : new Response(JSON.stringify({ source_url: "https://parcnaturalcollserola.cat/actualitat/avisos/", fetched_at: "2026-09-01T10:00:00Z", alerts: [{ title: "Wind notice", published: "setembre 1, 2026", excerpt: "Check conditions.", url: "https://parcnaturalcollserola.cat/wind" }], caution: "Open the source before departure." }), { status: 200 });
   try {
     setTrailPlanner(new TrailPlanner(artifact)); setRouteRenderer(() => undefined);
     const plan = toolContracts.find((candidate) => candidate.name === "plan_route"); assert.ok(plan);
@@ -91,8 +95,13 @@ test("get_trail_weather compares three local days and adds limited forecast cont
     let renderedWeather = false;
     setTrailWeatherRenderer(() => { renderedWeather = true; });
     const weather = toolContracts.find((candidate) => candidate.name === "get_trail_weather"); assert.ok(weather);
-    const forecast = await weather.execute({}) as { forecast_ready: boolean; next_3_days: Array<{ date: string }>; best_forecast_window: { time: string } };
-    assert.equal(forecast.forecast_ready, true); assert.deepEqual(forecast.next_3_days.map((day) => day.date), ["2026-09-01", "2026-09-02", "2026-09-03"]); assert.equal(forecast.best_forecast_window.time, "08:00–11:00"); assert.equal(renderedWeather, true);
+    const forecast = await weather.execute({}) as { forecast_ready: boolean; next_3_days: Array<{ date: string }>; recommended_forecast_window: { time: string } };
+    assert.equal(forecast.forecast_ready, true); assert.deepEqual(forecast.next_3_days.map((day) => day.date), ["2026-09-01", "2026-09-02", "2026-09-03"]); assert.equal(forecast.recommended_forecast_window.time, "08:00–11:00"); assert.equal(renderedWeather, true);
+    const evening = await weather.execute({ time_of_day: "evening" }) as { requested_time_of_day: string; recommended_forecast_window: { time: string; sunrise: string; sunset: string }; safety_boundary: string };
+    assert.equal(evening.requested_time_of_day, "evening"); assert.equal(evening.recommended_forecast_window.time, "17:00–20:00"); assert.equal(evening.recommended_forecast_window.sunrise, "07:21"); assert.equal(evening.recommended_forecast_window.sunset, "20:16"); assert.match(evening.safety_boundary, /Do not call conditions safe/);
+    const conditions = toolContracts.find((candidate) => candidate.name === "get_hiking_conditions"); assert.ok(conditions);
+    const decision = await conditions.execute({ time_of_day: "evening" }) as { safety_clearance: boolean; forecast: { available: boolean; time: string }; park_alerts: { available: boolean; active_alert_count: number }; decision_boundary: string };
+    assert.equal(decision.safety_clearance, false); assert.equal(decision.forecast.available, true); assert.equal(decision.forecast.time, "17:00–20:00"); assert.equal(decision.park_alerts.available, true); assert.equal(decision.park_alerts.active_alert_count, 1); assert.match(decision.decision_boundary, /not a safety verdict/); assert.ok(JSON.stringify(decision).length <= 1_500);
     const briefingTool = toolContracts.find((candidate) => candidate.name === "prepare_route_briefing"); assert.ok(briefingTool);
     const briefing = await briefingTool.execute({}) as { briefing: string; forecast_included: boolean; next_step: string };
     assert.equal(briefing.forecast_included, true); assert.match(briefing.briefing, /least-exposed forecast window/); assert.match(briefing.next_step, /chat response/); assert.ok(JSON.stringify(forecast).length <= 1_500);

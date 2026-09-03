@@ -14,9 +14,9 @@ looking at. Switchback makes that route state shared and inspectable.”
 
 ## 0:16–0:34 — WebMCP connection
 
-**Show:** WebMCP connected status and the thirteen-tool surface.
+**Show:** WebMCP connected status and the fourteen-tool surface.
 
-**Say:** “This page registers thirteen WebMCP tools directly with the browser
+**Say:** “This page registers fourteen WebMCP tools directly with the browser
 model context. The agent sees the same TrailPack, route card, and map that I do;
 there is no separate hidden planning backend.”
 

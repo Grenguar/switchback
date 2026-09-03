@@ -1,11 +1,11 @@
 import { TrailPlanner, circuitDistancesFor, circuitOptionsFor, documentedStarts, selectableCircuitStartIds, type PlannedRoute, type Waypoint } from "./planner";
 import { RouteSession, type WaypointEdit } from "./route-session";
 import { assessRouteDifficulty } from "./difficulty";
-import { fetchTrailWeather, type TrailWeather } from "./weather";
+import { fetchTrailWeather, recommendedWindow, type TimeOfDay, type TrailWeather } from "./weather";
 import { fetchParkAlerts, type ParkAlerts } from "./park-alerts";
 
 export interface ToolAnnotations { readOnlyHint: boolean; untrustedContentHint: boolean; }
-export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_difficulty" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "get_trail_weather" | "get_park_alerts" | "prepare_route_briefing" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
+export interface ToolContract { name: "list_circuit_options" | "validate_circuit" | "record_session_note" | "plan_route" | "get_route_summary" | "explain_difficulty" | "explain_segment" | "avoid_segment" | "prepare_gpx" | "get_trail_weather" | "get_hiking_conditions" | "get_park_alerts" | "prepare_route_briefing" | "describe_last_edit"; description: string; inputSchema: Record<string, unknown>; annotations: ToolAnnotations; execute: (input: unknown, signal?: AbortSignal) => Promise<unknown>; }
 export type ToolInvocationPhase = "started" | "succeeded" | "failed";
 export type ToolInvocationObserver = (name: ToolContract["name"], input: unknown, result: unknown | undefined, error: unknown | undefined, phase: ToolInvocationPhase) => void;
 export type PreparedGpx = Readonly<{ filename: string; content: string; exportedPoints: number; originalPoints: number; transitions: ReadonlyArray<Readonly<{ name: string; segmentName: string; latitude: number; longitude: number }>> }>;
@@ -134,13 +134,16 @@ const briefingFor = (route: PlannedRoute, forecast: TrailWeather | undefined, al
   ].join("\n");
   return Object.freeze({ title, text });
 };
-const dailyForecast = (forecast: TrailWeather): Array<Pick<TrailWeather["bestWindow"], "date" | "start" | "end" | "summary" | "temperatureC" | "precipitationProbability" | "precipitationMm" | "windKph" | "gustKph">> => {
+const dailyForecast = (forecast: TrailWeather) => {
   const byDate = new Map<string, TrailWeather["bestWindow"]>();
   for (const window of forecast.windows) {
     const currentBest = byDate.get(window.date);
     if (!currentBest || window.score < currentBest.score) byDate.set(window.date, window);
   }
-  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).map(({ date, start, end, summary, temperatureC, precipitationProbability, precipitationMm, windKph, gustKph }) => ({ date, start, end, summary, temperatureC, precipitationProbability, precipitationMm, windKph, gustKph }));
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)).map((best) => {
+    const evening = forecast.windows.find((window) => window.date === best.date && window.start === "17:00");
+    return { date: best.date, weekday: best.daylight?.weekday ?? best.date, sunrise: best.daylight?.sunrise ?? null, sunset: best.daylight?.sunset ?? null, evening: evening ? { time: `${evening.start}–${evening.end}`, summary: evening.summary, rain_pct: evening.precipitationProbability, gust_kph: evening.gustKph, crosses_sunset: evening.crossesSunset } : null };
+  });
 };
 type WeatherContext = Readonly<{ available: true; forecast: TrailWeather }> | Readonly<{ available: false; reason: string }>;
 type ParkAlertsContext = Readonly<{ available: true; alerts: ParkAlerts }> | Readonly<{ available: false; reason: string }>;
@@ -314,35 +317,65 @@ const rawToolContracts: ToolContract[] = [
     },
   },
   {
-    name: "get_trail_weather", description: "Compare the next three local forecast days for the active route and reveal the least-exposed daytime window. This is planning context, not a trail-safety or weather-alert assessment.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    name: "get_trail_weather", description: "Compare the next three local forecast days for the active route, including a 17:00–20:00 evening candidate and sunrise/sunset. Set time_of_day to evening when the person asks about an evening hike. This is planning context, not a trail-safety or weather-alert assessment.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: { time_of_day: { type: "string", enum: ["any", "morning", "afternoon", "evening"], description: "Optional preference for the recommended forecast window. Use evening for an after-work hike." } } },
     execute: async (input, signal) => {
-      only(object(input), []);
+      const data = object(input); only(data, ["time_of_day"]);
+      const preference = data.time_of_day === undefined ? "any" : choice(data.time_of_day, "time_of_day", ["any", "morning", "afternoon", "evening"] as const) as TimeOfDay;
       const route = current();
       const context = await loadWeatherContext(route);
       if (context.available) {
         const forecast = context.forecast;
-        const best = forecast.bestWindow;
+        const best = recommendedWindow(forecast, preference);
         return abortable(signal, {
-          forecast_available: true, forecast_ready: renderTrailWeather !== undefined, checked_at: forecast.checkedAt, timezone: forecast.timezone, source: forecast.source,
-          best_forecast_window: { date: best.date, time: `${best.start}–${best.end}`, summary: best.summary, temperature_c: best.temperatureC, precipitation_probability_percent: best.precipitationProbability, precipitation_mm: best.precipitationMm, wind_kph: best.windKph, gust_kph: best.gustKph },
-          next_3_days: dailyForecast(forecast), caution: forecast.caution,
-          next_step: "Use the forecast as limited planning context, then post the route briefing in chat. Do not present this as a safety clearance.",
+          forecast_available: true, forecast_ready: renderTrailWeather !== undefined, checked_at: forecast.checkedAt, timezone: forecast.timezone, source: forecast.source, requested_time_of_day: preference,
+          recommended_forecast_window: { date: best.date, weekday: best.daylight?.weekday ?? best.date, sunrise: best.daylight?.sunrise ?? null, sunset: best.daylight?.sunset ?? null, time: `${best.start}–${best.end}`, summary: best.summary, temp_c: best.temperatureC, rain_pct: best.precipitationProbability, gust_kph: best.gustKph, crosses_sunset: best.crossesSunset },
+          next_3_days: dailyForecast(forecast),
+          safety_boundary: "Do not call conditions safe. Combine forecast, daylight, route evidence, and official alerts; check current closures, warnings, signs, equipment, and the group before departure.",
+          next_step: "Use this as planning context, never a safety clearance.",
         });
       }
       return abortable(signal, { forecast_available: false, reason: context.reason, recommendation_basis: "TrailPack route evidence only; no live forecast was available.", next_step: "Continue with the route recommendation only if you state that forecast information is unavailable and ask the user to check a local weather source." });
     },
   },
   {
-    name: "get_park_alerts", description: "Read the Park's official active-alert list through Switchback's same-origin adapter. It returns notices with their publication dates and source links; it does not decide whether a notice applies to this exact route or remains in force.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: {} },
+    name: "get_hiking_conditions", description: "Assemble the active route’s decision context for a hiking conversation: graph route facts, conservative difficulty evidence, requested-time forecast and daylight, plus the Park’s official active-alert count. It never certifies that hiking is safe; the agent must explain what remains to be checked locally.", annotations: untrusted, inputSchema: { type: "object", additionalProperties: false, properties: { time_of_day: { type: "string", enum: ["any", "morning", "afternoon", "evening"], description: "Use evening when the person asks whether an after-work hike is sensible." } } },
     execute: async (input, signal) => {
-      only(object(input), []);
+      const data = object(input); only(data, ["time_of_day"]);
+      const preference = data.time_of_day === undefined ? "any" : choice(data.time_of_day, "time_of_day", ["any", "morning", "afternoon", "evening"] as const) as TimeOfDay;
+      const route = current();
+      const [weather, alerts] = await Promise.all([loadWeatherContext(route), loadParkAlertsContext()]);
+      const forecastContext = weather.available
+        ? (() => {
+          const forecast = recommendedWindow(weather.forecast, preference);
+          return { available: true, source: weather.forecast.source, timezone: weather.forecast.timezone, date: forecast.date, weekday: forecast.daylight?.weekday ?? forecast.date, time: `${forecast.start}–${forecast.end}`, sunrise: forecast.daylight?.sunrise ?? null, sunset: forecast.daylight?.sunset ?? null, crosses_sunset: forecast.crossesSunset, summary: forecast.summary, temperature_c: forecast.temperatureC, precipitation_probability_percent: forecast.precipitationProbability, gust_kph: forecast.gustKph };
+        })()
+        : { available: false, reason: weather.reason };
+      const alertContext = alerts.available
+        ? { available: true, source_url: alerts.alerts.sourceUrl, active_alert_count: alerts.alerts.alerts.length, notices: alerts.alerts.alerts.slice(0, 4).map((alert) => ({ title: alert.title, published: alert.published })) }
+        : { available: false, reason: alerts.reason };
+      return abortable(signal, {
+        safety_clearance: false,
+        requested_time_of_day: preference,
+        route: { distance_km: route.distanceKm, estimated_ascent_m: route.ascentM, moving_hours: route.durationHours, official_match_percent: route.waymarkedPercent, difficulty_evidence: assessRouteDifficulty(route) },
+        forecast: forecastContext,
+        park_alerts: alertContext,
+        decision_boundary: "This is decision support, not a safety verdict. Do not say the hike is safe. Check the full official alert source, current local weather warnings and closures, actual trail light, navigation, equipment, and the group’s capability before departure. Call get_park_alerts with notice_limit 8 for every listed notice.",
+      });
+    },
+  },
+  {
+    name: "get_park_alerts", description: "Read the Park's official active-alert list through Switchback's same-origin adapter. It returns notices with their publication dates and source links; it does not decide whether a notice applies to this exact route or remains in force. Request up to eight notice summaries when analysing hiking conditions.", annotations: readOnly, inputSchema: { type: "object", additionalProperties: false, properties: { notice_limit: { type: "integer", minimum: 1, maximum: 8, description: "Optional number of active notices to return. Use 8 for a fuller hiking-conditions review." } } },
+    execute: async (input, signal) => {
+      const data = object(input); only(data, ["notice_limit"]);
+      const noticeLimit = data.notice_limit === undefined ? 2 : data.notice_limit;
+      if (typeof noticeLimit !== "number" || !Number.isInteger(noticeLimit) || noticeLimit < 1 || noticeLimit > 8) throw new Error("notice_limit must be an integer from 1 through 8.");
       const context = await loadParkAlertsContext();
       if (context.available) {
         const alerts = context.alerts;
         return abortable(signal, {
           alerts_available: true, alerts_ready: renderParkAlerts !== undefined, fetched_at: alerts.fetchedAt, source_url: alerts.sourceUrl,
           active_alert_count: alerts.alerts.length,
-          latest_active_alerts: alerts.alerts.slice(0, 2).map((alert) => ({ title: alert.title, published: alert.published, excerpt: alert.excerpt.slice(0, 160), url: alert.url })),
+          active_alerts: alerts.alerts.slice(0, noticeLimit).map((alert) => ({ title: alert.title, published: alert.published, excerpt: alert.excerpt.slice(0, 160), url: alert.url })),
           caution: alerts.caution,
           next_step: "Open the source for any relevant notice and state its uncertainty. Do not treat this list as proof that a notice applies to the route or has expired.",
         });

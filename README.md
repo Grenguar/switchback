@@ -31,11 +31,12 @@ Switchback is a WebMCP-native planner for a short, car-accessible or transit-acc
 Use the site tools on this Switchback page. First call list_circuit_options and
 choose a returned short, medium, or long distance profile; these are not
 difficulty ratings. Call validate_circuit, then plan_route and
-get_route_summary. Call explain_difficulty, get_park_alerts, and
-get_trail_weather before recommending the route. If either external source is
-unavailable, state that the recommendation is based on TrailPack evidence only.
-Record the result with record_session_note and state its evidence and
-limitations.
+get_route_summary. Before discussing an evening hike, call
+get_hiking_conditions with time_of_day evening, explain_difficulty, and
+get_park_alerts with notice_limit 8. If either external source is unavailable,
+state that the recommendation is based on TrailPack evidence only. Do not call
+the hike safe: explain route evidence, forecast/daylight, official notices, and
+what still needs local checking. Record the result with record_session_note.
 ```
 
 Expected evidence: the map becomes a closed loop, the route card shows its
@@ -58,7 +59,7 @@ The result is inspectable: a person can see the selected trailhead, rendered lin
 
 ## What an agent can do
 
-The app registers thirteen browser-native WebMCP tools:
+The app registers fourteen browser-native WebMCP tools:
 
 1. List graph-verified circuit choices.
 2. Dry-run a circuit before altering the map.
@@ -69,10 +70,11 @@ The app registers thirteen browser-native WebMCP tools:
 7. Explain a TrailPack segment.
 8. Avoid a segment and replan without silently changing a failed route.
 9. Prepare a full-resolution GPX handoff.
-10. Compare the next three local forecast days and identify a limited, least-exposed daytime window.
-11. Read the Park's official active-alert list, retaining original Catalan, source links, and optional English machine translations.
-12. Prepare a reviewable, copyable briefing for a family / friends chat (with forecast and Park alerts when checked).
-13. Describe the last accepted map edit.
+10. Compare the next three local forecast days—including a 17:00–20:00 evening candidate plus sunrise/sunset—and identify a limited, least-exposed window.
+11. Assemble transparent hiking decision support: route evidence, conservative difficulty, requested-time forecast/daylight, and official-alert availability—never a safety clearance.
+12. Read the Park's official active-alert list, retaining original Catalan, source links, and optional English machine translations.
+13. Prepare a reviewable, copyable briefing for a family / friends chat (with forecast and Park alerts when checked).
+14. Describe the last accepted map edit.
 
 For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. `plan_route` automatically gathers the non-blocking forecast and alert context in a browser; other actions remain explicit and inspectable. The app always shows whether a browser model context is connected.
 
@@ -86,7 +88,8 @@ The current TrailPack does **not** prove current signs, closures, weather, surfa
 
 ### Live context and translations
 
-The route page compares the next three forecast days, reads the Park's active
+The route page compares the next three forecast days—including sunrise, sunset,
+and an evening candidate—then reads the Park's active
 official notices, and displays the original Catalan plus a clearly labelled
 English machine translation. All of this is optional planning context: missing
 or failed sources leave the graph-verified route intact and clearly marked as

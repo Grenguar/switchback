@@ -9,7 +9,7 @@ person can make a reviewable decision together.
 The WebMCP challenge work added the agent-native, human-reviewable experience
 to Switchback:
 
-- Thirteen strict browser tools that discover, validate, plan, explain, adapt,
+- Fourteen strict browser tools that discover, validate, plan, explain, adapt,
   brief, and prepare a GPX from the page's real state.
 - A visible shared action ledger and invocation worklog, so people see each
   agent action and its result rather than receiving an opaque text answer.
@@ -51,7 +51,7 @@ without making it a condition of planning:
 | Enrichment | Normalisation | How it is presented |
 | --- | --- | --- |
 | Ascent | Samples the ICGC LiDAR terrain model along the completed line and totals the sampled climb. | An estimate after rendering; ascent or grade cannot yet constrain route selection. |
-| Forecast | Converts Open-Meteo hourly values around the rendered route centre into three local daytime windows per day: 08:00–11:00, 11:00–14:00, and 14:00–17:00. Temperature, precipitation, wind, gusts, and weather code are scored to identify a least-exposed window. | Planning context only. It is a forecast grid cell, not an on-trail observation or weather clearance. |
+| Forecast and daylight | Converts Open-Meteo hourly values around the rendered route centre into 08:00–11:00, 11:00–14:00, 14:00–17:00, and 17:00–20:00 candidates per day; it also reads sunrise/sunset. Temperature, precipitation, wind, gusts, and weather code identify a least-exposed window, or an evening-specific one when requested. | Planning context only. It is a forecast grid cell and daylight estimate, not an on-trail observation, usable-light guarantee, or weather clearance. |
 | Official Park notices | The same-origin adapter fetches only the Park page's labelled active-alert section, strips HTML to text, deduplicates by source URL, caps the response at eight notices, and retains publication date and official link. | Notices are shown as Park-published context. Their presence does not prove they apply to this route or remain in force. |
 
 If either live request fails or is unavailable, the graph route remains visible.
@@ -92,7 +92,7 @@ WebMCP keeps every meaningful agent action page-bound and visible:
    download a file automatically. The person reviews and explicitly copies or
    clicks Download GPX.
 
-See [WEBMCP.md](WEBMCP.md) for the full thirteen-tool contract and a live test
+See [WEBMCP.md](WEBMCP.md) for the full fourteen-tool contract and a live test
 prompt.
 
 ## 5. Operational preparation and validation

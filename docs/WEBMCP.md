@@ -7,7 +7,8 @@ route card, shared trail ledger, and invocation log that the person can inspect.
 
 ## Connection lifecycle
 
-1. On load, the page checks for `document.modelContext`.
+1. On load, the page checks `document.modelContext`, then falls back to
+   `navigator.modelContext`.
 2. In a WebMCP-capable browser, `registerWebMcpTools()` registers each strict
    JSON-schema tool with the browser model context.
 3. The agent discovers those tools and calls them from the conversation.
@@ -67,11 +68,14 @@ recommendation: the response says the route is based on TrailPack evidence only.
 ## Test prompt for a WebMCP browser
 
 ```text
-Use the site tools on this Switchback page. List the verified circuit options,
-then plan a 7 km loop from vista_rica_parking, preferring waymarked paths.
-Summarize the route evidence and the live forecast and Park-alert availability.
-Prepare a family / friends briefing, but do not claim that a forecast or notice
-is a safety clearance and do not start a GPX download.
+Use the site tools on this Switchback page. First call list_circuit_options and
+choose a returned short, medium, or long distance profile; these are not
+difficulty ratings. Call validate_circuit, then plan_route and
+get_route_summary. Call explain_difficulty, get_park_alerts, and
+get_trail_weather before recommending the route. If either external source is
+unavailable, state that the recommendation is based on TrailPack evidence only.
+Record the result with record_session_note and state its evidence and
+limitations.
 ```
 
 For a live demonstration, capture the agent discovering the tools, the ledger

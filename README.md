@@ -28,11 +28,14 @@ Switchback is a WebMCP-native planner for a short, car-accessible or transit-acc
    file.
 
 ```text
-Use the site tools on this Switchback page. List the verified circuit options,
-then plan a 7 km loop from vista_rica_parking, preferring waymarked paths.
-Summarize the route evidence and the live forecast and Park-alert availability.
-Prepare a family / friends briefing, but do not claim that a forecast or notice
-is a safety clearance and do not start a GPX download.
+Use the site tools on this Switchback page. First call list_circuit_options and
+choose a returned short, medium, or long distance profile; these are not
+difficulty ratings. Call validate_circuit, then plan_route and
+get_route_summary. Call explain_difficulty, get_park_alerts, and
+get_trail_weather before recommending the route. If either external source is
+unavailable, state that the recommendation is based on TrailPack evidence only.
+Record the result with record_session_note and state its evidence and
+limitations.
 ```
 
 Expected evidence: the map becomes a closed loop, the route card shows its

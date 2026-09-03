@@ -7,7 +7,11 @@ route on the person’s map; forecast and official-alert context are visible and
 source-labelled; and the person retains final control over messages and GPX
 download.
 
-## Live smoke test
+## Reduced live smoke test
+
+This intentionally shorter prompt verifies the conversational route-to-briefing
+flow. For the complete tool sequence, use the page's **Copy agent test prompt**
+control or [the WebMCP guide](WEBMCP.md#test-prompt-for-a-webmcp-browser).
 
 In the ChatGPT desktop app built-in browser, open the production URL and use:
 

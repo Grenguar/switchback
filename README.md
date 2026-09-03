@@ -3,6 +3,8 @@
 [![Netlify Status](https://api.netlify.com/api/v1/badges/bafb7ab9-419a-4ca2-8376-c944abd91b19/deploy-status)](https://app.netlify.com/projects/switchback-mvp-igor/deploys)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+🚨 [Live Website](switchback-mvp-igor.netlify.app)
+
 **Ask for a loop. See the ground truth.**
 
 Switchback is a WebMCP-native planner for a short, car-accessible or transit-accessible walk in Collserola–Vallvidrera. A person and an agent work on the same map: the agent discovers site tools, chooses a graph-verified circuit, checks available forecast and Park-alert context, and leaves the resulting route visible for the person to inspect, brief to friends, and export.

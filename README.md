@@ -5,9 +5,48 @@
 
 **Ask for a loop. See the ground truth.**
 
-Switchback is a WebMCP-native planner for a short, car-accessible or transit-accessible walk in Collserola–Vallvidrera. A person and an agent work on the same map: the agent discovers site tools, chooses a graph-verified circuit, explains its evidence and limits, and leaves the resulting route visible for the person to inspect and export.
+Switchback is a WebMCP-native planner for a short, car-accessible or transit-accessible walk in Collserola–Vallvidrera. A person and an agent work on the same map: the agent discovers site tools, chooses a graph-verified circuit, checks available forecast and Park-alert context, and leaves the resulting route visible for the person to inspect, brief to friends, and export.
 
 **Live demo:** [switchback-mvp-igor.netlify.app](https://switchback-mvp-igor.netlify.app)
+
+## Judge quick start — live WebMCP demo
+
+**No account, login, API key, or credential is required.**
+
+1. Open [the live Switchback demo](https://switchback-mvp-igor.netlify.app) in
+   ChatGPT's in-app browser with site tools enabled, or in a Chrome profile
+   where WebMCP is enabled.
+2. Confirm the page says that its browser model context is connected, then use
+   the visible **Copy agent test prompt** button (or paste the prompt below)
+   into the agent conversation.
+3. Watch the agent discover and call the page tools. The same tab will show its
+   action in the worklog and ledger, render a loop on the map, and populate the
+   route card with source-labelled planning context.
+4. Ask the agent to prepare a family / friends briefing. Review it in the page
+   and use the visible Copy control; optionally prepare GPX, then manually
+   click **Download GPX**. The agent cannot send a message or auto-download a
+   file.
+
+```text
+Use the site tools on this Switchback page. First call list_circuit_options and
+choose a returned short, medium, or long distance profile; these are not
+difficulty ratings. Call validate_circuit, then plan_route and
+get_route_summary. Call explain_difficulty, get_park_alerts, and
+get_trail_weather before recommending the route. If either external source is
+unavailable, state that the recommendation is based on TrailPack evidence only.
+Record the result with record_session_note and state its evidence and
+limitations.
+```
+
+Expected evidence: the map becomes a closed loop, the route card shows its
+distance and sampled ascent, the agent action is visible in the shared ledger,
+and forecast/official-alert panels clearly say whether their live source was
+available. In a normal browser, Switchback's manual planner still works, but
+the page labels this **browser-demo mode**; that is not a WebMCP verification.
+
+The browser-native registration is in
+[`web/src/webmcp.ts`](web/src/webmcp.ts), and the strict page-tool behavior is
+documented in [WEBMCP.md](docs/WEBMCP.md).
 
 ![Switchback showing a rendered Vista Rica circuit, its graph-verified length choices, and estimated climb.](docs/screenshots/switchback-route-planner.png)
 
@@ -24,18 +63,18 @@ The app registers thirteen browser-native WebMCP tools:
 1. List graph-verified circuit choices.
 2. Dry-run a circuit before altering the map.
 3. Record a visible session note.
-4. Plan and render a closed circuit.
+4. Plan and render a closed circuit, with conversational live-context checks.
 5. Summarize the active route.
 6. Explain the route’s difficulty evidence and gaps.
 7. Explain a TrailPack segment.
 8. Avoid a segment and replan without silently changing a failed route.
 9. Prepare a full-resolution GPX handoff.
 10. Compare the next three local forecast days and identify a limited, least-exposed daytime window.
-11. Read the Park's official active-alert list, retaining its publication dates and source links.
-12. Prepare a reviewable, copyable briefing for a family or group chat (with forecast and Park alerts when checked).
+11. Read the Park's official active-alert list, retaining original Catalan, source links, and optional English machine translations.
+12. Prepare a reviewable, copyable briefing for a family / friends chat (with forecast and Park alerts when checked).
 13. Describe the last accepted map edit.
 
-For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. The agent must explicitly choose to call tools; the app shows whether a browser model context is connected.
+For a live agent run, open the demo in a WebMCP-capable ChatGPT browser context and use the page’s **Copy agent test prompt** control. `plan_route` automatically gathers the non-blocking forecast and alert context in a browser; other actions remain explicit and inspectable. The app always shows whether a browser model context is connected.
 
 ## Honest route evidence
 
@@ -45,17 +84,14 @@ Length profiles are **Short / Medium / Long**, never difficulty labels. `explain
 
 The current TrailPack does **not** prove current signs, closures, weather, surface condition, obstacles, exposure, grade, or technical difficulty. Park marked-path preference is evidence from the published network, not a statement of present-day waymarking. Check local conditions before departure.
 
-### Optional Park-alert translations
+### Live context and translations
 
-The `/api/park-alerts` Netlify function always returns the Park's original Catalan notices. When these server-only variables are set in Netlify Functions, it additionally renders an English machine translation under each notice:
-
-```text
-SWITCHBACK_TRANSLATE_REGION=eu-west-1
-SWITCHBACK_TRANSLATE_ACCESS_KEY_ID=...
-SWITCHBACK_TRANSLATE_SECRET_ACCESS_KEY=...
-```
-
-Use an IAM identity limited to `translate:TranslateText`; do not use `VITE_` names. Translation is optional: a missing or failed AWS call leaves the Catalan source notice visible. The endpoint is rate-limited to 20 requests per IP per minute to protect the Park source and translation spend.
+The route page compares the next three forecast days, reads the Park's active
+official notices, and displays the original Catalan plus a clearly labelled
+English machine translation. All of this is optional planning context: missing
+or failed sources leave the graph-verified route intact and clearly marked as
+TrailPack-only. The Park endpoint is server-side and rate-limited to 20
+requests/IP/minute. See [operations and configuration](docs/OPERATIONS.md).
 
 ## Run locally
 
@@ -87,9 +123,17 @@ The static TrailPack consists of 66 Collserola tiles with source records in its 
 
 To rebuild the official overlay and tiles, follow the commands and source notes in [docs/MVP-EVALUATION.md](docs/MVP-EVALUATION.md). The app routes locally over the TrailPack; map tiles are a visual reference layer, not a routing dependency.
 
+For the end-to-end preparation story—including graph normalisation, live
+forecast/notice normalisation, translation safeguards, and release
+validation—read [what Switchback prepares and normalises](docs/IMPLEMENTATION.md).
+
 Useful supporting material:
 
-- [WebMCP demo walkthrough](docs/DEMO.md)
+- [How WebMCP works and complete tool reference](docs/WEBMCP.md)
+- [What was prepared and normalised for the demo](docs/IMPLEMENTATION.md)
+- [Operations, live data, translations, and safety boundaries](docs/OPERATIONS.md)
+- [Submission video script](docs/VIDEO-SCRIPT.md)
+- [Short demo walkthrough](docs/DEMO.md)
 - [MVP evaluation evidence](docs/MVP-EVALUATION.md)
 - [Apache-2.0 license](LICENSE)
 
@@ -97,6 +141,7 @@ Useful supporting material:
 
 - [x] Public live URL
 - [x] WebMCP registration and visible agent-tool worklog
+- [x] No-login testing instructions and copy/paste live-agent prompt
 - [x] End-to-end route generation and user-click GPX handoff
 - [x] Open-source license file
 - [x] Public GitHub repository
